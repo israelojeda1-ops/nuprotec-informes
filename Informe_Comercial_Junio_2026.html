@@ -118,7 +118,7 @@ table.main td { text-align: center; padding: 8px; transition: filter 0.1s; }
     <div class="top-bar">
         <div class='header'>
             <h1>Informe Comercial — Año 2026</h1>
-            <p>NÜPROTEC SpA &nbsp;·&nbsp; 26/06/2026 04:38</p>
+            <p>NÜPROTEC SpA &nbsp;·&nbsp; 26/06/2026 04:45</p>
         </div>
         <div class="selector-container">
             <label for="month-select">Período:</label>
@@ -215,11 +215,10 @@ function switchTab(tabId) {
     document.getElementById('tab-' + tabId).classList.add('active');
 }
 
-// NUEVA FUNCIÓN JS: Renderiza los KPIs y la Tabla según el mes seleccionado
 function updateView(mes) {
     var rows = RESUMEN[mes] || [];
     
-    // 1. Calcular y poblar los bloques KPI globales del mes
+    // 1. Calcular KPIs Globales del mes seleccionado
     var tot_n = 0, tot_m = 0, tot_nv = 0, tot_nv_m = 0, pend_n = 0, pend_m = 0;
     rows.forEach(function(r) {
         tot_n += parseInt(r.Total_N || 0);
@@ -238,12 +237,12 @@ function updateView(mes) {
     document.getElementById('kpi-pend-n').textContent = pend_n;
     document.getElementById('kpi-pend-m').textContent = clp(pend_m) + ' en cartera';
     
-    // 2. Construir dinámicamente las filas coloreadas de la tabla
+    // 2. Construir filas de vendedores para el mes
     var tbody = document.getElementById('main-table-body');
     var html = '';
     
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:30px; color:#9CA3AF; font-weight: 500;">No hay transacciones registradas en este mes.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding:40px; color:#9CA3AF; font-weight: 500;">No existen transacciones registradas para este período.</td></tr>';
         resetDetailPanel();
         return;
     }
@@ -301,7 +300,6 @@ function showDetail(vend, estado, cellElement) {
     var color = {'En NV':'var(--fg-nv)', 'Pendiente':'var(--fg-pend)', 'Perdida':'var(--fg-perd)', 'Nula':'var(--fg-nula)'}[estado];
     panelTitle.innerHTML = '<span style="color:'+color+'">' + estado + '</span> &nbsp;·&nbsp; <span style="color:#6B7280">' + vend + '</span>';
 
-    // Capturar el mes activo del selector
     var currentMonth = document.getElementById('month-select').value;
     var d = DATA[currentMonth] && DATA[currentMonth][vend] && DATA[currentMonth][vend][estado];
     
@@ -351,7 +349,7 @@ function closeModal() {
     if(lastClickedRow) lastClickedRow.classList.remove('row-active');
 }
 
-// Inicialización de la vista al cargar por primera vez con el mes por defecto
+// Carga inicial automatizada con el mes en curso
 updateView(6);
 </script>
 </body></html>
