@@ -177,7 +177,7 @@ WHERE M.TipoBod='D' AND M.CodBode IN ('08','20')
 GROUP BY P.CodProd,P.DesProd,ISNULL(G.DesGrupo,'—'),ISNULL(S.DesSubGr,'—'),
          ISNULL(C.CostoUnitario,0),P.PrecioVta
 HAVING SUM(CASE WHEN M.CodBode IN ('08','20') THEN (M.Ingresos-M.Egresos) ELSE 0 END) > 0
-ORDER BY G.DesGrupo, P.DesProd
+ORDER BY ISNULL(G.DesGrupo,N'—'), P.DesProd
 """
 
 SQL_FACT = f"""
