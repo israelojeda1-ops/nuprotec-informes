@@ -1,5 +1,4 @@
 
-content: #!/usr/bin/env python3
 """
 Generador de Dashboard Comercial NUPROTEC
 Uso local : DB_PASSWORD=xxx GMAIL_PASS=xxx python generador/generar.py
