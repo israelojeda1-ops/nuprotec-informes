@@ -202,6 +202,27 @@ WHERE YEAR(CAB.Fecha)={anio}
   AND CAB.Estado='V' AND CAB.EnMantencion<>-1
 """
 
+SQL_VENTAS = f"""
+SELECT
+    YEAR(CAB.Fecha) AS Anio, MONTH(CAB.Fecha) AS Mes,
+    ISNULL(G.CodGrupo, 'SIN GRUPO') AS CodigoGrupo,
+    ISNULL(G.DesGrupo, 'Sin Grupo') AS Grupo,
+    PROD.CodProd AS CodigoProducto, PROD.DesProd AS Producto,
+    SUM(MOV.CantFacturada) AS CantidadVendida,
+    SUM(CASE WHEN CAB.SubTotal = 0 THEN ROUND(MOV.TotLinea,0)
+             ELSE ROUND(MOV.TotLinea*(1-CAB.TotalDesc/NULLIF(CAB.SubTotal,0)),0)
+        END) AS MontoNeto
+FROM NUPROTEC1.softland.iw_gmovi AS MOV
+INNER JOIN NUPROTEC1.softland.iw_gsaen AS CAB ON MOV.Tipo=CAB.Tipo AND MOV.NroInt=CAB.NroInt
+INNER JOIN NUPROTEC1.softland.iw_tprod AS PROD ON MOV.CodProd=PROD.CodProd
+LEFT  JOIN NUPROTEC1.softland.iw_tgrupo AS G ON PROD.CodGrupo=G.CodGrupo
+WHERE MONTH(CAB.Fecha)={mes_act} AND YEAR(CAB.Fecha)={anio}
+  AND CAB.Tipo IN ('F','N','D','B') AND CAB.Estado='V'
+  AND CAB.EnMantencion<>-1 AND MOV.CantFacturada<>0
+GROUP BY YEAR(CAB.Fecha),MONTH(CAB.Fecha),G.CodGrupo,G.DesGrupo,PROD.CodProd,PROD.DesProd
+ORDER BY G.DesGrupo, PROD.DesProd
+"""
+
 # ══════════════════════════════════════════════════════════════════════════════
 # EJECUTAR QUERIES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -211,11 +232,13 @@ df_cotizaciones = qdf(SQL_COTIZACIONES)
 df_nv           = qdf(SQL_NV)
 df_stock        = qdf(SQL_STOCK)
 df_fact         = qdf(SQL_FACT)
+df_ventas       = qdf(SQL_VENTAS)
 print(f'  Resumen cotizaciones : {len(df_resumen)} filas')
 print(f'  Detalle cotizaciones : {len(df_cotizaciones)} filas')
 print(f'  Notas de Venta       : {len(df_nv)} filas')
 print(f'  Stock                : {len(df_stock)} productos')
 print(f'  Facturacion          : {len(df_fact)} documentos')
+print(f'  Ventas mes actual    : {len(df_ventas)} filas')
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PROCESAR DATOS → ESTRUCTURAS JS
@@ -347,6 +370,18 @@ for m in range(1, 13):
         })
     PEND_ANIO[str(m)].sort(key=lambda x: -x['Monto'])
 
+# ── Tab Ventas Mes ────────────────────────────────────────────────────────────
+VENTAS_DATA = [
+    {'cod':   str(r.CodigoProducto).strip(), 'prod':  str(r.Producto).strip(),
+     'gcod':  str(r.CodigoGrupo).strip(),    'grupo': str(r.Grupo).strip(),
+     'cant':  float(r.CantidadVendida),      'monto': float(r.MontoNeto)}
+    for _, r in df_ventas.iterrows()
+]
+ventas_total_monto = float(df_ventas['MontoNeto'].sum())          if not df_ventas.empty else 0.0
+ventas_total_cant  = float(df_ventas['CantidadVendida'].sum())    if not df_ventas.empty else 0.0
+ventas_n_productos = int(df_ventas['CodigoProducto'].nunique())   if not df_ventas.empty else 0
+ventas_n_grupos    = int(df_ventas['Grupo'].nunique())            if not df_ventas.empty else 0
+
 # ── Tab Stock ─────────────────────────────────────────────────────────────────
 STOCK_DATA = [
     {
@@ -461,6 +496,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     <button class="tab-btn"         onclick="switchTab(this,\'pendientes\')">Pendientes A&ntilde;o</button>
     <button class="tab-btn"         onclick="switchTab(this,\'facturacion\')">Facturaci&oacute;n</button>
     <button class="tab-btn"         onclick="switchTab(this,\'stock\')">Stock</button>
+    <button class="tab-btn"         onclick="switchTab(this,\'ventas\')">Ventas Mes</button>
   </nav>
 
   <!-- ════ TAB 1: COTIZACIONES ════ -->
@@ -573,6 +609,33 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     </div>
   </div>
 
+  <!-- ════ TAB 6: VENTAS MES ════ -->
+  <div id="tab-ventas" class="tab-content">
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-lbl">Monto neto vendido</div><div class="kpi-val">VMONTO_</div><div class="kpi-sub">VMES_</div></div>
+      <div class="kpi"><div class="kpi-lbl">Productos distintos</div><div class="kpi-val">VNP_</div><div class="kpi-sub">en VNG_ grupos</div></div>
+    </div>
+    <div class="stock-search-bar">
+      <input type="text" id="vt-search" placeholder="Buscar producto o c&oacute;digo..." oninput="filterVentas()">
+      <select id="vt-grupo" onchange="filterVentas()"><option value="">Todos los grupos</option></select>
+      <span id="vt-count" style="font-size:12px;color:#6B7280"></span>
+    </div>
+    <div class="card">
+      <div class="card-title">Ventas por producto &mdash; VMES_</div>
+      <div style="overflow-x:auto">
+        <table class="main">
+          <thead><tr>
+            <th style="text-align:left">Producto</th>
+            <th style="text-align:left;border-right:1px solid #E5E7EB">Grupo</th>
+            <th>Cantidad</th>
+            <th>Monto neto</th>
+          </tr></thead>
+          <tbody id="vt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">N&Uuml;PROTEC SpA &nbsp;&middot;&nbsp; Informe generado autom&aacute;ticamente &nbsp;&middot;&nbsp; GEN_</div>
 </div>
 <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
@@ -582,13 +645,16 @@ var RESUMEN    = RESUMEN_;
 var DATA       = DATA_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
-var PEND_ANIO  = PEND_;
+var PEND_ANIO  = PENDANIO_;
 var STOCK      = STOCK_;
+var VENTAS     = VENTAS_;
 var Q          = String.fromCharCode(39);
 var mesActual  = \'MES_\';
 var lastRow    = null;
 var stockAll   = STOCK.slice();
 var stockFilt  = stockAll.slice();
+var ventasAll  = VENTAS.slice();
+var ventasFilt = ventasAll.slice();
 var MESES_ABR  = [\'\',\'Ene\',\'Feb\',\'Mar\',\'Abr\',\'May\',\'Jun\',\'Jul\',\'Ago\',\'Sep\',\'Oct\',\'Nov\',\'Dic\'];
 
 function clp(v){ return \'$\' + Math.round(v).toLocaleString(\'es-CL\'); }
@@ -882,27 +948,76 @@ function renderStock(){
   tbody.innerHTML=html;
 }
 
+/* ══ TAB VENTAS ═════════════════════════════════════════════════════ */
+function initVentas(){
+  var grupos=[...new Set(ventasAll.map(function(v){ return v.grupo; }))].sort();
+  var sel=document.getElementById(\'vt-grupo\');
+  grupos.forEach(function(g){
+    var o=document.createElement(\'option\'); o.value=g; o.textContent=g; sel.appendChild(o);
+  });
+  filterVentas();
+}
+
+function filterVentas(){
+  var q=document.getElementById(\'vt-search\').value.toLowerCase();
+  var g=document.getElementById(\'vt-grupo\').value;
+  ventasFilt=ventasAll.filter(function(v){
+    return (!g||v.grupo===g) && (!q||v.prod.toLowerCase().includes(q)||v.cod.toLowerCase().includes(q));
+  });
+  renderVentas();
+}
+
+function renderVentas(){
+  var tbody=document.getElementById(\'vt-tbody\');
+  document.getElementById(\'vt-count\').textContent=ventasFilt.length+\' productos\';
+  if(!ventasFilt.length){ tbody.innerHTML=\'<tr><td colspan="4" style="text-align:center;padding:40px;color:#9CA3AF">Sin resultados.</td></tr>\'; return; }
+  var html=\'\'; var totCant=0,totMonto=0;
+  ventasFilt.forEach(function(v){
+    totCant+=v.cant; totMonto+=v.monto;
+    html+=\'<tr style="border-bottom:1px solid #F3F4F6">\';
+    html+=\'<td style="padding:6px 8px;text-align:left;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\'+v.prod+\'">\'+v.prod+\'</td>\';
+    html+=\'<td style="padding:6px 8px;text-align:left;border-right:1px solid #E5E7EB"><span class="tag" style="background:#F3F4F6;color:#374151">\'+v.grupo+\'</span></td>\';
+    html+=\'<td>\'+v.cant.toLocaleString(\'es-CL\')+\'</td>\';
+    html+=\'<td style="text-align:right;font-weight:600;color:var(--nu-blue)">\'+clp(v.monto)+\'</td></tr>\';
+  });
+  html+=\'<tr style="background:#F3F4F6;border-top:2px solid #D1D5DB;font-weight:700">\';
+  html+=\'<td colspan="2" style="padding:8px;text-align:left;border-right:1px solid #E5E7EB;font-size:11px;text-transform:uppercase;color:#374151">TOTAL (\'+ventasFilt.length+\' productos)</td>\';
+  html+=\'<td>\'+totCant.toLocaleString(\'es-CL\')+\'</td>\';
+  html+=\'<td style="text-align:right;color:var(--nu-blue)">\'+clp(totMonto)+\'</td></tr>\';
+  tbody.innerHTML=html;
+}
+
 /* ══ INICIO ══════════════════════════════════════════════════════════ */
 updateCotiTab(\'MES_\');
 updateNVTab(\'MES_\');
 updateFactTab(\'MES_\');
 updatePendTab();
 initStock();
+initVentas();
 </script>
 </body></html>'''
+
+def clp_py(v):
+    try: return f"${int(round(v)):,}".replace(',', '.')
+    except: return '—'
 
 # Reemplazar placeholders (no f-string para evitar conflicto con llaves CSS)
 html = (HTML_TEMPLATE
     .replace('ANIO_',    str(anio))
     .replace('GEN_',     gen_str)
     .replace('OPTS_',    opts)
+    .replace('VMONTO_',  clp_py(ventas_total_monto))
+    .replace('VMES_',    nombre_mes)          # must come before MES_
     .replace('MES_',     str(mes_act))
     .replace('RESUMEN_', js_safe(RESUMEN))
     .replace('DATA_',    js_safe(DATA))
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
-    .replace('PEND_',    js_safe(PEND_ANIO))
+    .replace('PENDANIO_',js_safe(PEND_ANIO))
     .replace('STOCK_',   js_safe(STOCK_DATA))
+    .replace('VENTAS_',  js_safe(VENTAS_DATA))
+    .replace('VNP_',     str(ventas_n_productos))
+    .replace('VNG_',     str(ventas_n_grupos))
 )
 
 nombre_archivo = f'Dashboard_NUPROTEC_{anio}.html'
@@ -913,10 +1028,6 @@ print(f'HTML generado: {nombre_archivo} ({len(html)//1024} KB)')
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIL RESUMEN
 # ══════════════════════════════════════════════════════════════════════════════
-def clp_py(v):
-    try: return f"${int(round(v)):,}".replace(',', '.')
-    except: return '—'
-
 datos_m = RESUMEN.get(str(mes_act), [])
 tn_m  = sum(r['Total_N']     for r in datos_m)
 tm_m  = sum(r['Total_Monto'] for r in datos_m)
