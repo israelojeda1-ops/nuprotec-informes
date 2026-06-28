@@ -8,6 +8,8 @@ on:
 jobs:
   generar:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # <-- add this block
 
     steps:
       - name: Checkout repositorio
