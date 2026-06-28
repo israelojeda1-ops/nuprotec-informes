@@ -1,1 +1,41 @@
+name: Generar Dashboard NUPROTEC
 
+on:
+  schedule:
+    - cron: '0 9 1 * *'   # 9:00 AM UTC el día 1 de cada mes
+  workflow_dispatch:        # Ejecución manual desde la UI de GitHub Actions
+
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar ODBC Driver 17 para SQL Server
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update -q
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17 unixodbc-dev
+
+      - name: Instalar dependencias Python
+        run: pip install -r generador/requirements.txt
+
+      - name: Generar Dashboard y enviar mail
+        env:
+          DB_PASSWORD:  ${{ secrets.DB_PASSWORD }}
+          GMAIL_PASS:   ${{ secrets.GMAIL_PASS }}
+          MAIL_DESTINO: ${{ vars.MAIL_DESTINO }}
+        run: python generador/generar.py
+
+      - name: Publicar HTML en el repositorio
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add "Dashboard_NUPROTEC_*.html"
+          git diff --cached --quiet \
+            || git commit -m "Dashboard $(date +'%B %Y') — generado automáticamente [skip ci]"
+          git push
