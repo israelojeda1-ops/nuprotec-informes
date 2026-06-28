@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+
+content: #!/usr/bin/env python3
 """
 Generador de Dashboard Comercial NUPROTEC
 Uso local : DB_PASSWORD=xxx GMAIL_PASS=xxx python generador/generar.py
@@ -177,7 +178,7 @@ WHERE M.TipoBod='D' AND M.CodBode IN ('08','20')
 GROUP BY P.CodProd,P.DesProd,ISNULL(G.DesGrupo,'—'),ISNULL(S.DesSubGr,'—'),
          ISNULL(C.CostoUnitario,0),P.PrecioVta
 HAVING SUM(CASE WHEN M.CodBode IN ('08','20') THEN (M.Ingresos-M.Egresos) ELSE 0 END) > 0
-ORDER BY ISNULL(G.DesGrupo,N'—'), P.DesProd
+ORDER BY ISNULL(G.DesGrupo,'—'), P.DesProd
 """
 
 SQL_FACT = f"""
@@ -993,5 +994,3 @@ if GMAIL_PASS:
         print(f'Error al enviar mail: {e}')
 else:
     print('GMAIL_PASS no configurado — mail omitido')
-
-print('Listo.')
