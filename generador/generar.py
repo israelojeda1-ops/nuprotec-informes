@@ -1,9 +1,16 @@
-
+#!/usr/bin/env python3
 """
 Generador de Dashboard Comercial NUPROTEC
 Uso local : DB_PASSWORD=xxx GMAIL_PASS=xxx python generador/generar.py
 GitHub    : configurar Secrets DB_PASSWORD y GMAIL_PASS en el repositorio
 """
+
+import os, json, base64, smtplib, urllib.request
+import pyodbc, pandas as pd
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 
 import os, json, base64, smtplib, urllib.request
 import pyodbc, pandas as pd
