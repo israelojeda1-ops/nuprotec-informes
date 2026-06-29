@@ -35,9 +35,12 @@ jobs:
         run: python generador/generar.py
 
       - name: Publicar HTML en el repositorio
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "GitHub Actions"
           git config user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/israelojeda1-ops/nuprotec-informes.git
           git add "Dashboard_NUPROTEC_*.html"
           git diff --cached --quiet \
             || git commit -m "Dashboard $(date +'%B %Y') — generado automáticamente [skip ci]"
