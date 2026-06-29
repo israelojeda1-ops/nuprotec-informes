@@ -549,6 +549,10 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
 .btn-export.primary{background:var(--nu-blue);color:white;}
 .btn-export.secondary{background:#E5E7EB;color:#374151;}
 .btn-export:hover{opacity:0.88;}
+.btn-regen{padding:8px 14px;font-size:12px;font-weight:700;background:var(--nu-orange);color:white;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;box-shadow:0 2px 6px rgba(196,73,24,0.35);transition:opacity 0.15s;}
+.btn-regen:hover{opacity:0.88;}.btn-regen:disabled{opacity:0.5;cursor:not-allowed;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1B2A4E;color:white;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.25);opacity:0;transition:opacity 0.3s;pointer-events:none;}
+.toast.show{opacity:1;}
 .sf-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(17,24,39,0.55);z-index:600;}
 .sf-overlay.open{display:block;}
 .sf-drawer{display:none;position:fixed;bottom:0;left:0;right:0;background:white;border-top:3px solid var(--nu-blue);box-shadow:0 -8px 30px rgba(0,0,0,0.18);z-index:601;max-height:65vh;flex-direction:column;}
@@ -570,11 +574,13 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
         <p>N&Uuml;PROTEC SpA &nbsp;&middot;&nbsp; GEN_</p>
       </div>
     </div>
-    <div class="selector-container">
+    <div class="selector-container" style="display:flex;align-items:center;gap:10px">
+      <button class="btn-regen" onclick="regenerarDashboard()" id="btn-regen" title="Regenerar dashboard desde base de datos">&#x1F504; Regenerar</button>
       <label for="month-select">Periodo:</label>
       <select id="month-select" class="month-select" onchange="onMonthChange(this.value)">OPTS_</select>
     </div>
   </div>
+  <div id="toast" class="toast"></div>
 
   <nav class="tabs-nav">
     <button class="tab-btn active"  onclick="switchTab(this,\'cotizaciones\')">Cotizaciones</button>
@@ -1276,6 +1282,33 @@ function exportSFExcel(){
   ws[\'!cols\']=[{wch:22},{wch:8},{wch:30},{wch:12},{wch:16},{wch:12},{wch:35},{wch:18},{wch:10},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws,\'SF_\'+mesNom);
   XLSX.writeFile(wb,\'NV_SinFacturar_\'+mesNom+\'_ANIO_.xlsx\');
+}
+
+/* ══ REGENERAR DASHBOARD ══════════════════════════════════════════════ */
+function showToast(msg,duration){
+  var t=document.getElementById(\'toast\');
+  t.textContent=msg; t.classList.add(\'show\');
+  setTimeout(function(){ t.classList.remove(\'show\'); },duration||3000);
+}
+function regenerarDashboard(){
+  var token=localStorage.getItem(\'gh_token_nuprotec\');
+  if(!token){
+    token=prompt(\'Ingresa tu GitHub Personal Access Token\\n(crearlo en github.com → Settings → Developer settings → Fine-grained tokens)\\n\\nPermiso mínimo: "Actions" → Read and write\');
+    if(!token) return;
+    localStorage.setItem(\'gh_token_nuprotec\',token.trim());
+  }
+  var btn=document.getElementById(\'btn-regen\');
+  btn.disabled=true; btn.textContent=\'⏳ Enviando...\';
+  fetch(\'https://api.github.com/repos/israelojeda1-ops/nuprotec-informes/actions/workflows/generar-dashboard.yml/dispatches\',{
+    method:\'POST\',
+    headers:{\'Authorization\':\'Bearer \'+token,\'Content-Type\':\'application/json\',\'Accept\':\'application/vnd.github+json\'},
+    body:JSON.stringify({ref:\'main\'})
+  }).then(function(r){
+    btn.disabled=false; btn.textContent=\'🔄 Regenerar\';
+    if(r.status===204){ showToast(\'✅ Generación iniciada — lista en ~3 min. Recarga la página.\',5000); }
+    else if(r.status===401){ localStorage.removeItem(\'gh_token_nuprotec\'); showToast(\'❌ Token inválido. Se eliminó, vuelve a intentarlo.\',4000); }
+    else { showToast(\'❌ Error \'+r.status+\'. Verifica permisos del token.\',4000); }
+  }).catch(function(e){ btn.disabled=false; btn.textContent=\'🔄 Regenerar\'; showToast(\'❌ Error de red: \'+e.message,4000); });
 }
 
 /* ══ INICIO ══════════════════════════════════════════════════════════ */

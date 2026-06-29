@@ -260,6 +260,24 @@ table.main td{text-align:center;padding:9px 8px;border-bottom:1px solid #F1F5F9;
   .tab-btn{padding:8px 12px;font-size:12px;}
   .tab-btn .tab-icon{display:none;}
 }
+
+.btn-regen{
+  padding:8px 14px;font-size:12px;font-weight:700;
+  background:var(--nu-orange);color:white;border:none;
+  border-radius:8px;cursor:pointer;display:flex;align-items:center;
+  gap:6px;white-space:nowrap;box-shadow:0 2px 6px rgba(196,73,24,0.35);
+  transition:opacity 0.15s;
+}
+.btn-regen:hover{opacity:0.88;}
+.btn-regen:disabled{opacity:0.5;cursor:not-allowed;}
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#1B2A4E;color:white;padding:12px 20px;border-radius:10px;
+  font-size:13px;font-weight:600;z-index:9999;
+  box-shadow:0 4px 16px rgba(0,0,0,0.25);
+  opacity:0;transition:opacity 0.3s;pointer-events:none;
+}
+.toast.show{opacity:1;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -273,6 +291,7 @@ table.main td{text-align:center;padding:9px 8px;border-bottom:1px solid #F1F5F9;
     </div>
   </div>
   <div class="header-controls">
+    <button class="btn-regen" onclick="regenerarDashboard()" id="btn-regen" title="Regenerar dashboard desde base de datos">🔄 Regenerar</button>
     <span class="period-label">Periodo</span>
     <select id="month-select" class="month-select" onchange="onMonthChange(this.value)"><option value="1">Enero 2026</option><option value="2">Febrero 2026</option><option value="3">Marzo 2026</option><option value="4">Abril 2026</option><option value="5">Mayo 2026</option><option value="6" selected>Junio 2026</option><option value="7">Julio 2026</option><option value="8">Agosto 2026</option><option value="9">Septiembre 2026</option><option value="10">Octubre 2026</option><option value="11">Noviembre 2026</option><option value="12">Diciembre 2026</option></select>
   </div>
@@ -1012,6 +1031,47 @@ function exportSFExcel(){
   XLSX.writeFile(wb,'NV_SinFacturar_'+mesNom+'_2026.xlsx');
 }
 
+
+/* ══ REGENERAR DASHBOARD ══════════════════════════════════════════════ */
+function showToast(msg, duration){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, duration||3000);
+}
+
+function regenerarDashboard(){
+  var token=localStorage.getItem('gh_token_nuprotec');
+  if(!token){
+    token=prompt(
+      'Ingresa tu GitHub Personal Access Token\n' +
+      '(solo necesitas crearlo una vez en github.com → Settings → Developer settings → Fine-grained tokens)\n\n' +
+      'Permiso mínimo requerido: "Actions" → Read and write'
+    );
+    if(!token) return;
+    localStorage.setItem('gh_token_nuprotec', token.trim());
+  }
+  var btn=document.getElementById('btn-regen');
+  btn.disabled=true; btn.textContent='⏳ Enviando...';
+  fetch('https://api.github.com/repos/israelojeda1-ops/nuprotec-informes/actions/workflows/generar-dashboard.yml/dispatches',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
+    body:JSON.stringify({ref:'main'})
+  }).then(function(r){
+    btn.disabled=false; btn.textContent='🔄 Regenerar';
+    if(r.status===204){
+      showToast('✅ Generación iniciada — lista en ~3 min. Recarga la página luego.',5000);
+    } else if(r.status===401){
+      localStorage.removeItem('gh_token_nuprotec');
+      showToast('❌ Token inválido. Se eliminó. Vuelve a intentarlo.',4000);
+    } else {
+      showToast('❌ Error '+r.status+'. Verifica permisos del token.',4000);
+    }
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent='🔄 Regenerar';
+    showToast('❌ Error de red: '+e.message,4000);
+  });
+}
+
 /* ══ INICIO ══════════════════════════════════════════════════════════ */
 updateCotiTab('6');
 updateNVTab('6');
@@ -1021,4 +1081,5 @@ initStock();
 updateVentasTab(mesActual);
 updateClienteTab(mesActual);
 </script>
+<div id="toast" class="toast"></div>
 </body></html>
