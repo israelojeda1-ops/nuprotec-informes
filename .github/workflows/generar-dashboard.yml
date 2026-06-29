@@ -28,9 +28,10 @@ jobs:
 
       - name: Generar Dashboard y enviar mail
         env:
-          DB_PASSWORD:  ${{ secrets.DB_PASSWORD }}
-          GMAIL_PASS:   ${{ secrets.GMAIL_PASS }}
-          MAIL_DESTINO: ${{ vars.MAIL_DESTINO }}
+          DB_PASSWORD:   ${{ secrets.DB_PASSWORD }}
+          GMAIL_PASS:    ${{ secrets.GMAIL_PASS }}
+          MAIL_DESTINO:  ${{ vars.MAIL_DESTINO }}
+          TRIGGER_TOKEN: ${{ secrets.TRIGGER_TOKEN }}
         run: python generador/generar.py
 
       - name: Publicar HTML en el repositorio
