@@ -145,7 +145,7 @@ SELECT
     prod.CodGrupo AS Grupo,
     det.CodProd AS CodProd,
     prod.DesProd AS Producto,
-    det.nvCantidad AS Cantidad,
+    det.nvCant AS Cantidad,
     det.nvTotLinea AS ValorLinea,
     nv.nvMonto AS MontoNV,
     COALESCE(CAST(fac.Folio AS varchar(20)),CAST(fac.Factura AS varchar(20)),
