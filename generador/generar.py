@@ -332,35 +332,43 @@ for m in range(1, 13):
         })
     NV_RESUMEN[str(m)].sort(key=lambda x: -x['MontoTotal'])
 
-# ── Tab NV: NV_SF_DET (Sin Facturar — detalle hasta nivel producto) ───────────
-NV_SF_DET = {}
-for m in range(1, 13):
-    dfm = df_nv[(df_nv['Mes'] == m) & (df_nv['EstadoFacturacion'] == 'Sin facturar')]
-    NV_SF_DET[str(m)] = {}
-    if dfm.empty:
-        continue
-    for vend, dv in dfm.groupby('Vendedor'):
+def _build_nv_detail(df_slice):
+    """Build vendedor→[NV con líneas] dict from a df_nv slice."""
+    out = {}
+    if df_slice.empty:
+        return out
+    for vend, dv in df_slice.groupby('Vendedor'):
         nvs = []
         for nv_num, nv_rows in dv.groupby('NroNV'):
             first = nv_rows.iloc[0]
             lineas = []
             for _, r in nv_rows.iterrows():
                 lineas.append({
-                    'cod':   str(r['CodProd']).strip() if pd.notna(r.get('CodProd')) else '',
-                    'prod':  str(r['Producto']).strip() if pd.notna(r.get('Producto')) else '',
-                    'cant':  float(r['Cantidad']) if pd.notna(r.get('Cantidad')) else 0,
+                    'cod':   str(r['CodProd']).strip()  if pd.notna(r.get('CodProd'))  else '',
+                    'prod':  str(r['Producto']).strip()  if pd.notna(r.get('Producto')) else '',
+                    'cant':  float(r['Cantidad'])        if pd.notna(r.get('Cantidad')) else 0,
                     'grupo': str(r['Grupo']).strip(),
-                    'monto': float(r['ValorLinea']) if pd.notna(r['ValorLinea']) else 0,
+                    'monto': float(r['ValorLinea'])      if pd.notna(r['ValorLinea'])   else 0,
                 })
             nvs.append({
-                'nv':    int(nv_num),
-                'cli':   str(first['Cliente']).strip(),
-                'oc':    str(first['OrdenCompra']).strip() if pd.notna(first['OrdenCompra']) else '',
+                'nv':   int(nv_num),
+                'cli':  str(first['Cliente']).strip(),
+                'oc':   str(first['OrdenCompra']).strip() if pd.notna(first['OrdenCompra']) else '',
+                'fact': str(first['EstadoFacturacion']),
+                'desp': str(first['EstadoDespacho']),
                 'monto': float(first['MontoNV']),
-                'desp':  str(first['EstadoDespacho']),
-                'lins':  lineas,
+                'lins': lineas,
             })
-        NV_SF_DET[str(m)][str(vend).strip()] = sorted(nvs, key=lambda x: -x['monto'])
+        out[str(vend).strip()] = sorted(nvs, key=lambda x: -x['monto'])
+    return out
+
+# ── Tab NV: NV_SF_DET (Sin Facturar) y NV_DET (todas) ───────────────────────
+NV_SF_DET = {}
+NV_DET    = {}
+for m in range(1, 13):
+    dfm = df_nv[df_nv['Mes'] == m]
+    NV_SF_DET[str(m)] = _build_nv_detail(dfm[dfm['EstadoFacturacion'] == 'Sin facturar'])
+    NV_DET[str(m)]    = _build_nv_detail(dfm)
 
 # ── Tab Facturación: FACT_RESUMEN ─────────────────────────────────────────────
 FACT_RESUMEN = {}
@@ -766,6 +774,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
 var RESUMEN    = RESUMEN_;
 var DATA       = DATA_;
 var NV_SF_DET  = NV_SF_DET_;
+var NV_DET     = NV_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var PEND_ANIO  = PENDANIO_;
@@ -1228,12 +1237,22 @@ function exportNVExcel(scope){
   if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
   var wb=XLSX.utils.book_new();
   function addSheet(mes){
-    var rows=NV_RES[String(mes)]||[];
-    if(!rows.length) return;
-    var d=[[\'Vendedor\',\'Total NVs\',\'Activas\',\'Facturadas\',\'Sin Facturar\',\'Monto Total\',\'Monto Facturado\',\'Monto Pendiente\']];
-    rows.forEach(function(r){ d.push([r.Vendedor,r.Total_N,r.Activas,r.Facturadas,r.SinFacturar,r.MontoTotal,r.MontoFact,r.MontoPend]); });
+    var mesData=NV_DET[String(mes)]||{};
+    if(!Object.keys(mesData).length) return;
+    var d=[[\'Vendedor\',\'NV N°\',\'Cliente\',\'OC\',\'Facturación\',\'Despacho\',\'Cód. Producto\',\'Producto\',\'Grupo\',\'Cantidad\',\'Monto Línea\',\'Monto NV\']];
+    Object.keys(mesData).sort().forEach(function(vend){
+      (mesData[vend]||[]).forEach(function(nv){
+        if(!nv.lins||!nv.lins.length){
+          d.push([vend,nv.nv,nv.cli,nv.oc||\'\',nv.fact,nv.desp,\'\',\'\',\'\',\'\',\'\',nv.monto]);
+        } else {
+          nv.lins.forEach(function(lin,li){
+            d.push([vend,nv.nv,nv.cli,nv.oc||\'\',nv.fact,nv.desp,lin.cod||\'\',lin.prod||\'\',lin.grupo,lin.cant,lin.monto,li===0?nv.monto:\'\']);
+          });
+        }
+      });
+    });
     var ws=XLSX.utils.aoa_to_sheet(d);
-    ws[\'!cols\']=[{wch:26},{wch:10},{wch:9},{wch:12},{wch:12},{wch:16},{wch:16},{wch:16}];
+    ws[\'!cols\']=[{wch:22},{wch:8},{wch:30},{wch:12},{wch:14},{wch:14},{wch:14},{wch:35},{wch:18},{wch:10},{wch:14},{wch:14}];
     XLSX.utils.book_append_sheet(wb,ws,MESES_NOM[mes]||String(mes));
   }
   if(scope===\'mes\'){ addSheet(parseInt(mesActual)); }
@@ -1283,6 +1302,7 @@ html = (HTML_TEMPLATE
     .replace('RESUMEN_', js_safe(RESUMEN))
     .replace('DATA_',    js_safe(DATA))
     .replace('NV_SF_DET_',js_safe(NV_SF_DET))
+    .replace('NV_DET_',  js_safe(NV_DET))
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
     .replace('PENDANIO_',js_safe(PEND_ANIO))
