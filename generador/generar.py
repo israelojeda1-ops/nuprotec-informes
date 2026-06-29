@@ -787,7 +787,7 @@ var FACT_RES   = FACT_RES_;
 var PEND_ANIO  = PENDANIO_;
 var STOCK         = STOCK_;
 var VENTAS        = VENTAS_;
-var CLIENTE_DATA  = CLIENTE_;
+var CLIENTE_DATA  = CLIDAT_;
 var Q          = String.fromCharCode(39);
 var mesActual  = \'MES_\';
 var lastRow    = null;
@@ -1338,7 +1338,7 @@ html = (HTML_TEMPLATE
     .replace('PENDANIO_',js_safe(PEND_ANIO))
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
-    .replace('CLIENTE_', js_safe(CLIENTE_DATA))
+    .replace('CLIDAT_', js_safe(CLIENTE_DATA))
     .replace('TRIGGER_TOK_', __import__('base64').b64encode(TRIGGER_TOKEN.encode()).decode() if TRIGGER_TOKEN else '')
 )
 
