@@ -142,6 +142,9 @@ SELECT
     CASE est.NVEstDesp WHEN -1 THEN 'Despachada' WHEN 0 THEN 'Sin despachar'
         ELSE CAST(est.NVEstDesp AS varchar(5)) END AS EstadoDespacho,
     prod.CodGrupo AS Grupo,
+    det.CodProd AS CodProd,
+    prod.DesProd AS Producto,
+    det.nvCantidad AS Cantidad,
     det.nvTotLinea AS ValorLinea,
     nv.nvMonto AS MontoNV,
     COALESCE(CAST(fac.Folio AS varchar(20)),CAST(fac.Factura AS varchar(20)),
@@ -329,6 +332,36 @@ for m in range(1, 13):
         })
     NV_RESUMEN[str(m)].sort(key=lambda x: -x['MontoTotal'])
 
+# ── Tab NV: NV_SF_DET (Sin Facturar — detalle hasta nivel producto) ───────────
+NV_SF_DET = {}
+for m in range(1, 13):
+    dfm = df_nv[(df_nv['Mes'] == m) & (df_nv['EstadoFacturacion'] == 'Sin facturar')]
+    NV_SF_DET[str(m)] = {}
+    if dfm.empty:
+        continue
+    for vend, dv in dfm.groupby('Vendedor'):
+        nvs = []
+        for nv_num, nv_rows in dv.groupby('NroNV'):
+            first = nv_rows.iloc[0]
+            lineas = []
+            for _, r in nv_rows.iterrows():
+                lineas.append({
+                    'cod':   str(r['CodProd']).strip() if pd.notna(r.get('CodProd')) else '',
+                    'prod':  str(r['Producto']).strip() if pd.notna(r.get('Producto')) else '',
+                    'cant':  float(r['Cantidad']) if pd.notna(r.get('Cantidad')) else 0,
+                    'grupo': str(r['Grupo']).strip(),
+                    'monto': float(r['ValorLinea']) if pd.notna(r['ValorLinea']) else 0,
+                })
+            nvs.append({
+                'nv':    int(nv_num),
+                'cli':   str(first['Cliente']).strip(),
+                'oc':    str(first['OrdenCompra']).strip() if pd.notna(first['OrdenCompra']) else '',
+                'monto': float(first['MontoNV']),
+                'desp':  str(first['EstadoDespacho']),
+                'lins':  lineas,
+            })
+        NV_SF_DET[str(m)][str(vend).strip()] = sorted(nvs, key=lambda x: -x['monto'])
+
 # ── Tab Facturación: FACT_RESUMEN ─────────────────────────────────────────────
 FACT_RESUMEN = {}
 for m in range(1, 13):
@@ -474,7 +507,20 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
   .modal-overlay.active{display:block;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(17,24,39,0.7);z-index:999;}
 }
 .footer{text-align:center;font-size:11px;color:#9CA3AF;margin-top:2rem;padding-bottom:1rem;}
+.export-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;}
+.btn-export{padding:6px 14px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
+.btn-export.primary{background:var(--nu-blue);color:white;}
+.btn-export.secondary{background:#E5E7EB;color:#374151;}
+.btn-export:hover{opacity:0.88;}
+.sf-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(17,24,39,0.55);z-index:600;}
+.sf-overlay.open{display:block;}
+.sf-drawer{display:none;position:fixed;bottom:0;left:0;right:0;background:white;border-top:3px solid var(--nu-blue);box-shadow:0 -8px 30px rgba(0,0,0,0.18);z-index:601;max-height:65vh;flex-direction:column;}
+.sf-drawer.open{display:flex;}
+.sf-drawer-hdr{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#F8FAFC;border-bottom:1px solid #E5E7EB;flex-shrink:0;}
+.sf-drawer-body{overflow-y:auto;flex:1;}
+.sf-drawer-body::-webkit-scrollbar{width:6px;}.sf-drawer-body::-webkit-scrollbar-track{background:#F9FAFB;}.sf-drawer-body::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:4px;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -541,14 +587,19 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
       <div class="kpi"><div class="kpi-lbl">Facturadas</div><div id="nv-fact-n" class="kpi-val">0</div><div id="nv-fact-m" class="kpi-sub">$0 facturado</div></div>
       <div class="kpi"><div class="kpi-lbl">Sin facturar</div><div id="nv-sf-n" class="kpi-val">0</div><div id="nv-sf-m" class="kpi-sub">$0 pendiente</div></div>
     </div>
+    <div class="export-bar">
+      <button class="btn-export primary" onclick="exportNVExcel(\'mes\')">&#11015; Excel este mes</button>
+      <button class="btn-export secondary" onclick="exportNVExcel(\'todo\')">&#11015; Excel a&ntilde;o completo</button>
+      <span style="font-size:11px;color:#9CA3AF">Clic en &quot;Sin facturar&quot; para ver detalle</span>
+    </div>
     <div class="card">
-      <div class="card-title">Notas de Venta por vendedor</div>
+      <div class="card-title">Notas de Venta por vendedor &mdash; Clic en Sin facturar para ver detalle</div>
       <table class="main">
         <thead><tr>
           <th style="text-align:left;border-right:1px solid #E5E7EB">Vendedor</th>
           <th>Total NVs</th><th style="border-right:1px solid #E5E7EB">Activas</th>
           <th style="background:#DCFCE7">Facturadas</th>
-          <th style="background:#FEF9C3;border-right:1px solid #E5E7EB">Sin facturar</th>
+          <th style="background:#FEF9C3;border-right:1px solid #E5E7EB">Sin facturar &#128269;</th>
           <th>Monto total</th><th>Facturado</th><th>Pendiente</th>
         </tr></thead>
         <tbody id="nv-tbody"></tbody>
@@ -640,9 +691,22 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
 </div>
 <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
 
+<div class="sf-overlay" id="sf-overlay" onclick="closeSFDrawer()"></div>
+<div class="sf-drawer" id="sf-drawer">
+  <div class="sf-drawer-hdr">
+    <div id="sf-drawer-title" style="font-size:14px;font-weight:600;color:var(--nu-blue)">NV Sin Facturar</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-export primary" onclick="exportSFExcel()">&#11015; Excel</button>
+      <button onclick="closeSFDrawer()" style="background:#E5E7EB;border:none;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">&times;</button>
+    </div>
+  </div>
+  <div id="sf-drawer-body" class="sf-drawer-body"></div>
+</div>
+
 <script>
 var RESUMEN    = RESUMEN_;
 var DATA       = DATA_;
+var NV_SF_DET  = NV_SF_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var PEND_ANIO  = PENDANIO_;
@@ -816,7 +880,12 @@ function updateNVTab(mes){
     html+=\'<td style="font-weight:600">\'+r.Total_N+\'</td>\';
     html+=\'<td style="color:var(--fg-nv);border-right:1px solid #E5E7EB">\'+r.Activas+\'</td>\';
     html+=\'<td style="background:#DCFCE7;color:#15803D;font-weight:700">\'+r.Facturadas+\'</td>\';
-    html+=\'<td style="background:#FEF9C3;color:#D97706;font-weight:700;border-right:1px solid #E5E7EB">\'+r.SinFacturar+\'</td>\';
+    if(r.SinFacturar>0){
+      var vEsc=r.Vendedor.replace(/\\\\/g,\'\\\\\\\\  \').replace(/\'/g,"\\\\\'");
+      html+=\'<td class="clk-cell" onclick="showSFDrawer(\\\'\'+vEsc+\'\\\')" style="background:#FEF9C3;color:#D97706;font-weight:700;border-right:1px solid #E5E7EB;cursor:pointer" title="Ver detalle NVs sin facturar">\'+r.SinFacturar+\'</td>\';
+    } else {
+      html+=\'<td style="background:#FEF9C3;color:#D97706;border-right:1px solid #E5E7EB">0</td>\';
+    }
     html+=\'<td style="text-align:right;font-weight:600">\'+clp(r.MontoTotal)+\'</td>\';
     html+=\'<td style="text-align:right;color:#15803D">\'+clp(r.MontoFact)+\'</td>\';
     html+=\'<td style="text-align:right;color:#D97706">\'+clp(r.MontoPend)+\'</td></tr>\';
@@ -987,6 +1056,105 @@ function renderVentas(){
   tbody.innerHTML=html;
 }
 
+/* ══ NV SIN FACTURAR DRAWER ══════════════════════════════════════════ */
+var MESES_NOM=[\'\'\'Enero\',\'Febrero\',\'Marzo\',\'Abril\',\'Mayo\',\'Junio\',\'Julio\',\'Agosto\',\'Septiembre\',\'Octubre\',\'Noviembre\',\'Diciembre\'];
+var sfCurrentVend=null;
+
+function showSFDrawer(vend){
+  sfCurrentVend=vend;
+  var mesNom=MESES_NOM[parseInt(mesActual)]||mesActual;
+  document.getElementById(\'sf-drawer-title\').innerHTML=\'NV Sin Facturar &middot; <span style="color:var(--nu-orange)">\'+vend+\'</span> &middot; \'+mesNom+\' ANIO_\';
+  var data=(NV_SF_DET[mesActual]&&NV_SF_DET[mesActual][vend])||[];
+  var html=\'\';
+  if(!data.length){
+    html=\'<div style="text-align:center;padding:40px 20px;color:#9CA3AF;font-size:13px"><div style="font-size:32px;margin-bottom:12px">&#128230;</div><strong style="display:block;margin-bottom:6px;color:#6B7280">Sin detalle disponible</strong>Regenere el dashboard para ver el detalle de productos por NV sin facturar.</div>\';
+  } else {
+    var hasProd=data.some(function(nv){ return nv.lins&&nv.lins.length>0; });
+    if(hasProd){
+      html=\'<table class="lista-table"><thead><tr><th>NV N&deg;</th><th class="left">Cliente</th><th>OC</th><th>Despacho</th><th class="left">Producto</th><th>Grupo</th><th>Cant.</th><th class="right">Monto l&iacute;nea</th><th class="right">Monto NV</th></tr></thead><tbody>\';
+      data.forEach(function(nv){
+        var nL=nv.lins?nv.lins.length:0;
+        var dc=nv.desp===\'Sin despachar\'?\'#D97706\':\'#15803D\';
+        if(nL===0){
+          html+=\'<tr><td style="font-weight:600;color:var(--nu-blue)">\'+nv.nv+\'</td><td class="left">\'+nv.cli+\'</td><td>\'+(nv.oc||\'&mdash;\')+\'</td><td><span style="font-size:10px;color:\'+dc+\';font-weight:600">\'+nv.desp+\'</span></td><td colspan="3" style="color:#9CA3AF">Sin detalle</td><td class="right">&mdash;</td><td class="right" style="font-weight:600">\'+clp(nv.monto)+\'</td></tr>\';
+        } else {
+          nv.lins.forEach(function(lin,li){
+            html+=\'<tr>\';
+            if(li===0){
+              html+=\'<td rowspan="\'+nL+\'" style="font-weight:600;color:var(--nu-blue);vertical-align:top">\'+nv.nv+\'</td>\';
+              html+=\'<td rowspan="\'+nL+\'" class="left" style="vertical-align:top">\'+nv.cli+\'</td>\';
+              html+=\'<td rowspan="\'+nL+\'" style="vertical-align:top">\'+(nv.oc||\'&mdash;\')+\'</td>\';
+              html+=\'<td rowspan="\'+nL+\'" style="vertical-align:top"><span style="font-size:10px;color:\'+dc+\';font-weight:600">\'+nv.desp+\'</span></td>\';
+            }
+            html+=\'<td class="left" style="max-width:180px;white-space:normal">\'+(lin.prod||\'&mdash;\')+\'</td>\';
+            html+=\'<td><span class="tag" style="background:#F3F4F6;color:#374151">\'+lin.grupo+\'</span></td>\';
+            html+=\'<td>\'+lin.cant.toLocaleString(\'es-CL\')+\'</td>\';
+            html+=\'<td class="right">\'+clp(lin.monto)+\'</td>\';
+            if(li===0) html+=\'<td rowspan="\'+nL+\'" class="right" style="font-weight:700;vertical-align:top">\'+clp(nv.monto)+\'</td>\';
+            html+=\'</tr>\';
+          });
+        }
+      });
+    } else {
+      html=\'<table class="lista-table"><thead><tr><th>NV N&deg;</th><th class="left">Cliente</th><th>OC</th><th>Despacho</th><th class="right">Monto NV</th></tr></thead><tbody>\';
+      data.forEach(function(nv){
+        var dc=nv.desp===\'Sin despachar\'?\'#D97706\':\'#15803D\';
+        html+=\'<tr><td style="font-weight:600;color:var(--nu-blue)">\'+nv.nv+\'</td><td class="left">\'+nv.cli+\'</td><td>\'+(nv.oc||\'&mdash;\')+\'</td><td><span style="font-size:10px;color:\'+dc+\';font-weight:600">\'+nv.desp+\'</span></td><td class="right" style="font-weight:600">\'+clp(nv.monto)+\'</td></tr>\';
+      });
+    }
+    var tot=data.reduce(function(s,nv){return s+nv.monto;},0);
+    html+=\'<tr style="background:#F9FAFB;border-top:2px solid #E5E7EB;font-weight:700"><td colspan="\'+(hasProd?8:4)+\'" class="right" style="padding:12px 10px;font-size:10px;color:#6B7280">TOTAL &mdash; \'+data.length+\' NVs sin facturar</td><td class="right" style="padding:12px 10px;color:var(--nu-blue);font-size:13px">\'+clp(tot)+\'</td></tr>\';
+    html+=\'</tbody></table>\';
+  }
+  document.getElementById(\'sf-drawer-body\').innerHTML=html;
+  document.getElementById(\'sf-drawer\').classList.add(\'open\');
+  document.getElementById(\'sf-overlay\').classList.add(\'open\');
+  document.body.style.overflow=\'hidden\';
+}
+
+function closeSFDrawer(){
+  document.getElementById(\'sf-drawer\').classList.remove(\'open\');
+  document.getElementById(\'sf-overlay\').classList.remove(\'open\');
+  document.body.style.overflow=\'\';
+  sfCurrentVend=null;
+}
+
+/* ══ EXCEL EXPORT ════════════════════════════════════════════════════ */
+function exportNVExcel(scope){
+  if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
+  var wb=XLSX.utils.book_new();
+  function addSheet(mes){
+    var rows=NV_RES[String(mes)]||[];
+    if(!rows.length) return;
+    var d=[[\'Vendedor\',\'Total NVs\',\'Activas\',\'Facturadas\',\'Sin Facturar\',\'Monto Total\',\'Monto Facturado\',\'Monto Pendiente\']];
+    rows.forEach(function(r){ d.push([r.Vendedor,r.Total_N,r.Activas,r.Facturadas,r.SinFacturar,r.MontoTotal,r.MontoFact,r.MontoPend]); });
+    var ws=XLSX.utils.aoa_to_sheet(d);
+    ws[\'!cols\']=[{wch:26},{wch:10},{wch:9},{wch:12},{wch:12},{wch:16},{wch:16},{wch:16}];
+    XLSX.utils.book_append_sheet(wb,ws,MESES_NOM[mes]||String(mes));
+  }
+  if(scope===\'mes\'){ addSheet(parseInt(mesActual)); }
+  else { for(var m=1;m<=12;m++) addSheet(m); }
+  XLSX.writeFile(wb,\'NV_NUPROTEC_\'+(scope===\'mes\'?MESES_NOM[parseInt(mesActual)]:\'Año\')+\'_ANIO_.xlsx\');
+}
+
+function exportSFExcel(){
+  if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
+  var wb=XLSX.utils.book_new();
+  var mesNom=MESES_NOM[parseInt(mesActual)]||mesActual;
+  var d=[[\'Vendedor\',\'NV N°\',\'Cliente\',\'OC\',\'Estado Despacho\',\'Cód. Producto\',\'Producto\',\'Grupo\',\'Cantidad\',\'Monto Línea\',\'Monto NV\']];
+  var md=NV_SF_DET[mesActual]||{};
+  Object.keys(md).forEach(function(vend){
+    (md[vend]||[]).forEach(function(nv){
+      if(!nv.lins||!nv.lins.length){ d.push([vend,nv.nv,nv.cli,nv.oc||\'\',nv.desp,\'\',\'\',\'\',\'\',\'\',nv.monto]); }
+      else { nv.lins.forEach(function(l,li){ d.push([vend,nv.nv,nv.cli,nv.oc||\'\',nv.desp,l.cod||\'\',l.prod||\'\',l.grupo,l.cant,l.monto,li===0?nv.monto:\'\']); }); }
+    });
+  });
+  var ws=XLSX.utils.aoa_to_sheet(d);
+  ws[\'!cols\']=[{wch:22},{wch:8},{wch:30},{wch:12},{wch:16},{wch:12},{wch:35},{wch:18},{wch:10},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,\'SF_\'+mesNom);
+  XLSX.writeFile(wb,\'NV_SinFacturar_\'+mesNom+\'_ANIO_.xlsx\');
+}
+
 /* ══ INICIO ══════════════════════════════════════════════════════════ */
 updateCotiTab(\'MES_\');
 updateNVTab(\'MES_\');
@@ -1011,6 +1179,7 @@ html = (HTML_TEMPLATE
     .replace('MES_',     str(mes_act))
     .replace('RESUMEN_', js_safe(RESUMEN))
     .replace('DATA_',    js_safe(DATA))
+    .replace('NV_SF_DET_',js_safe(NV_SF_DET))
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
     .replace('PENDANIO_',js_safe(PEND_ANIO))
