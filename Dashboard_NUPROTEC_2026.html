@@ -1039,9 +1039,10 @@ function showToast(msg, duration){
   setTimeout(function(){ t.classList.remove('show'); }, duration||3000);
 }
 
-var _rtk='';
+var _rtke='';
 function regenerarDashboard(){
-  if(!_rtk){ showToast('⚠️ Agrega TRIGGER_TOKEN como GitHub Secret y regenera.',5000); return; }
+  if(!_rtke){ showToast('⚠️ Agrega TokenRegenerar como GitHub Secret y regenera.',5000); return; }
+  var _rtk=atob(_rtke);
   var btn=document.getElementById('btn-regen');
   btn.disabled=true; btn.textContent='⏳ Enviando...';
   fetch('https://api.github.com/repos/israelojeda1-ops/nuprotec-informes/actions/workflows/generar-dashboard.yml/dispatches',{
@@ -1051,7 +1052,7 @@ function regenerarDashboard(){
   }).then(function(r){
     btn.disabled=false; btn.textContent='🔄 Regenerar';
     if(r.status===204){ showToast('✅ Generación iniciada — lista en ~3 min. Recarga la página.',5000); }
-    else { showToast('❌ Error '+r.status+'. Verifica el secret TRIGGER_TOKEN.',4000); }
+    else { showToast('❌ Error '+r.status+'. Verifica el secret TokenRegenerar.',4000); }
   }).catch(function(e){ btn.disabled=false; btn.textContent='🔄 Regenerar'; showToast('❌ Error de red: '+e.message,4000); });
 }
 

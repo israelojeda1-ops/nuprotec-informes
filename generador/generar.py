@@ -1291,9 +1291,10 @@ function showToast(msg,duration){
   t.textContent=msg; t.classList.add(\'show\');
   setTimeout(function(){ t.classList.remove(\'show\'); },duration||3000);
 }
-var _rtk=\'TRIGGER_TOK_\';
+var _rtke=\'TRIGGER_TOK_\';
 function regenerarDashboard(){
-  if(!_rtk){ showToast(\'⚠️ Agrega TRIGGER_TOKEN como GitHub Secret y regenera.\',5000); return; }
+  if(!_rtke){ showToast(\'⚠️ Agrega TokenRegenerar como GitHub Secret y regenera.\',5000); return; }
+  var _rtk=atob(_rtke);
   var btn=document.getElementById(\'btn-regen\');
   btn.disabled=true; btn.textContent=\'⏳ Enviando...\';
   fetch(\'https://api.github.com/repos/israelojeda1-ops/nuprotec-informes/actions/workflows/generar-dashboard.yml/dispatches\',{
@@ -1338,7 +1339,7 @@ html = (HTML_TEMPLATE
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
     .replace('CLIENTE_', js_safe(CLIENTE_DATA))
-    .replace('TRIGGER_TOK_', TRIGGER_TOKEN)
+    .replace('TRIGGER_TOK_', __import__('base64').b64encode(TRIGGER_TOKEN.encode()).decode() if TRIGGER_TOKEN else '')
 )
 
 nombre_archivo = f'Dashboard_NUPROTEC_{anio}.html'
