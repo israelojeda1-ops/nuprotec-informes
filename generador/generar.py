@@ -219,7 +219,7 @@ FROM NUPROTEC1.softland.iw_gmovi AS MOV
 INNER JOIN NUPROTEC1.softland.iw_gsaen AS CAB ON MOV.Tipo=CAB.Tipo AND MOV.NroInt=CAB.NroInt
 INNER JOIN NUPROTEC1.softland.iw_tprod AS PROD ON MOV.CodProd=PROD.CodProd
 LEFT  JOIN NUPROTEC1.softland.iw_tgrupo AS G ON PROD.CodGrupo=G.CodGrupo
-WHERE MONTH(CAB.Fecha)={mes_act} AND YEAR(CAB.Fecha)={anio}
+WHERE YEAR(CAB.Fecha)={anio}
   AND CAB.Tipo IN ('F','N','D','B') AND CAB.Estado='V'
   AND CAB.EnMantencion<>-1 AND MOV.CantFacturada<>0
 GROUP BY YEAR(CAB.Fecha),MONTH(CAB.Fecha),G.CodGrupo,G.DesGrupo,PROD.CodProd,PROD.DesProd
@@ -404,16 +404,45 @@ for m in range(1, 13):
     PEND_ANIO[str(m)].sort(key=lambda x: -x['Monto'])
 
 # ── Tab Ventas Mes ────────────────────────────────────────────────────────────
-VENTAS_DATA = [
-    {'cod':   str(r.CodigoProducto).strip(), 'prod':  str(r.Producto).strip(),
-     'gcod':  str(r.CodigoGrupo).strip(),    'grupo': str(r.Grupo).strip(),
-     'cant':  float(r.CantidadVendida),      'monto': float(r.MontoNeto)}
-    for _, r in df_ventas.iterrows()
-]
-ventas_total_monto = float(df_ventas['MontoNeto'].sum())          if not df_ventas.empty else 0.0
-ventas_total_cant  = float(df_ventas['CantidadVendida'].sum())    if not df_ventas.empty else 0.0
-ventas_n_productos = int(df_ventas['CodigoProducto'].nunique())   if not df_ventas.empty else 0
-ventas_n_grupos    = int(df_ventas['Grupo'].nunique())            if not df_ventas.empty else 0
+VENTAS_DATA = {}
+for m in range(1, 13):
+    dfm = df_ventas[df_ventas['Mes'] == m]
+    VENTAS_DATA[str(m)] = [
+        {'cod': str(r.CodigoProducto).strip(), 'prod': str(r.Producto).strip(),
+         'gcod': str(r.CodigoGrupo).strip(),   'grupo': str(r.Grupo).strip(),
+         'cant': float(r.CantidadVendida),      'monto': float(r.MontoNeto)}
+        for _, r in dfm.iterrows()
+    ]
+
+# ── Tab Análisis por Cliente ──────────────────────────────────────────────────
+from collections import Counter
+CLIENTE_DATA = {}
+for m in range(1, 13):
+    clientes = {}
+    # Cotizaciones del mes
+    dfc = df_cotizaciones[df_cotizaciones['Mes'] == m]
+    for cli, grp in dfc.groupby('Cliente'):
+        uniq = grp.drop_duplicates('NroCotizacion')
+        clientes.setdefault(cli, {}).update({
+            'coti_n': len(uniq), 'coti_m': float(uniq['NetoCotizacion'].sum()),
+            'nv_n': 0, 'nv_m': 0.0, 'nv_sf_n': 0, 'nv_sf_m': 0.0, 'dup': False
+        })
+    # NVs del mes
+    dfn = df_nv[df_nv['Mes'] == m]
+    for cli, grp in dfn.groupby('Cliente'):
+        uniq_nv = grp.drop_duplicates('NroNV')
+        sf = uniq_nv[uniq_nv['EstadoFacturacion'] == 'Sin facturar']
+        montos = list(uniq_nv['MontoNV'])
+        dup = len(montos) != len(set(montos)) and len(montos) > 0
+        clientes.setdefault(cli, {'coti_n': 0, 'coti_m': 0.0}).update({
+            'nv_n': len(uniq_nv), 'nv_m': float(uniq_nv['MontoNV'].sum()),
+            'nv_sf_n': len(sf), 'nv_sf_m': float(sf['MontoNV'].sum()),
+            'dup': dup
+        })
+    CLIENTE_DATA[str(m)] = sorted(
+        [{'cli': cli, **vals} for cli, vals in clientes.items()],
+        key=lambda x: -(x.get('nv_m', 0) + x.get('coti_m', 0))
+    )
 
 # ── Tab Stock ─────────────────────────────────────────────────────────────────
 STOCK_DATA = [
@@ -472,7 +501,7 @@ body{font-family:"Segoe UI",Arial,sans-serif;background:#F9FAFB;color:#111827;pa
 .kpi-val{font-size:24px;font-weight:700;color:var(--nu-blue);margin:4px 0 2px;}
 .kpi-sub{font-size:12px;color:#6B7280;}
 .split-layout{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;}
-.card{background:white;border:1px solid #E5E7EB;border-radius:8px;overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:1.5rem;}
+.card{background:white;border:1px solid #E5E7EB;border-radius:8px;overflow-x:auto;overflow-y:visible;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:1.5rem;}
 .card-title{font-size:11px;font-weight:600;color:#6B7280;padding:12px;border-bottom:1px solid #E5E7EB;background:#FAFAFA;text-transform:uppercase;letter-spacing:0.5px;}
 table.main{width:100%;border-collapse:collapse;font-size:12px;}
 table.main th{font-size:10px;font-weight:600;color:#6B7280;text-align:center;padding:8px;border-bottom:2px solid #E5E7EB;text-transform:uppercase;background:#FAFAFA;white-space:nowrap;}
@@ -543,6 +572,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     <button class="tab-btn"         onclick="switchTab(this,\'facturacion\')">Facturaci&oacute;n</button>
     <button class="tab-btn"         onclick="switchTab(this,\'stock\')">Stock</button>
     <button class="tab-btn"         onclick="switchTab(this,\'ventas\')">Ventas Mes</button>
+    <button class="tab-btn"         onclick="switchTab(this,\'cliente\')">Por Cliente</button>
   </nav>
 
   <!-- ════ TAB 1: COTIZACIONES ════ -->
@@ -663,8 +693,8 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
   <!-- ════ TAB 6: VENTAS MES ════ -->
   <div id="tab-ventas" class="tab-content">
     <div class="kpis">
-      <div class="kpi"><div class="kpi-lbl">Monto neto vendido</div><div class="kpi-val">VMONTO_</div><div class="kpi-sub">VMES_</div></div>
-      <div class="kpi"><div class="kpi-lbl">Productos distintos</div><div class="kpi-val">VNP_</div><div class="kpi-sub">en VNG_ grupos</div></div>
+      <div class="kpi"><div class="kpi-lbl">Monto neto vendido</div><div id="vt-kpi-monto" class="kpi-val">$0</div><div id="vt-kpi-mes" class="kpi-sub"></div></div>
+      <div class="kpi"><div class="kpi-lbl">Productos distintos</div><div id="vt-kpi-np" class="kpi-val">0</div><div id="vt-kpi-ng" class="kpi-sub"></div></div>
     </div>
     <div class="stock-search-bar">
       <input type="text" id="vt-search" placeholder="Buscar producto o c&oacute;digo..." oninput="filterVentas()">
@@ -672,7 +702,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
       <span id="vt-count" style="font-size:12px;color:#6B7280"></span>
     </div>
     <div class="card">
-      <div class="card-title">Ventas por producto &mdash; VMES_</div>
+      <div id="vt-card-title" class="card-title">Ventas por producto</div>
       <div style="overflow-x:auto">
         <table class="main">
           <thead><tr>
@@ -682,6 +712,32 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
             <th>Monto neto</th>
           </tr></thead>
           <tbody id="vt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ TAB 7: POR CLIENTE ════ -->
+  <div id="tab-cliente" class="tab-content">
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-lbl">Clientes activos</div><div id="cli-n" class="kpi-val">0</div><div id="cli-ns" class="kpi-sub">con cotiz. o NV</div></div>
+      <div class="kpi"><div class="kpi-lbl">Con NVs duplicadas</div><div id="cli-dup" class="kpi-val">0</div><div id="cli-dups" class="kpi-sub">mismo monto en mes</div></div>
+    </div>
+    <div class="card">
+      <div id="cli-card-title" class="card-title">An&aacute;lisis por cliente</div>
+      <div style="overflow-x:auto">
+        <table class="main">
+          <thead><tr>
+            <th style="text-align:left;border-right:1px solid #E5E7EB">Cliente</th>
+            <th style="background:#DBEAFE">Cotiz. N&deg;</th>
+            <th style="background:#DBEAFE;border-right:1px solid #E5E7EB">Cotiz. Monto</th>
+            <th style="background:#DCFCE7">NVs N&deg;</th>
+            <th style="background:#DCFCE7;border-right:1px solid #E5E7EB">NVs Monto</th>
+            <th style="background:#FEF9C3">Sin Fact. N&deg;</th>
+            <th style="background:#FEF9C3;border-right:1px solid #E5E7EB">Sin Fact. Monto</th>
+            <th>Alerta</th>
+          </tr></thead>
+          <tbody id="cli-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -710,15 +766,16 @@ var NV_SF_DET  = NV_SF_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var PEND_ANIO  = PENDANIO_;
-var STOCK      = STOCK_;
-var VENTAS     = VENTAS_;
+var STOCK         = STOCK_;
+var VENTAS        = VENTAS_;
+var CLIENTE_DATA  = CLIENTE_;
 var Q          = String.fromCharCode(39);
 var mesActual  = \'MES_\';
 var lastRow    = null;
 var stockAll   = STOCK.slice();
 var stockFilt  = stockAll.slice();
-var ventasAll  = VENTAS.slice();
-var ventasFilt = ventasAll.slice();
+var ventasAll  = [];
+var ventasFilt = [];
 var MESES_ABR  = [\'\',\'Ene\',\'Feb\',\'Mar\',\'Abr\',\'May\',\'Jun\',\'Jul\',\'Ago\',\'Sep\',\'Oct\',\'Nov\',\'Dic\'];
 
 function clp(v){ return \'$\' + Math.round(v).toLocaleString(\'es-CL\'); }
@@ -736,6 +793,8 @@ function onMonthChange(mes){
   updateCotiTab(mes);
   updateNVTab(mes);
   updateFactTab(mes);
+  updateVentasTab(mes);
+  updateClienteTab(mes);
 }
 
 /* ══ TAB COTIZACIONES ══════════════════════════════════════════════ */
@@ -1018,12 +1077,23 @@ function renderStock(){
 }
 
 /* ══ TAB VENTAS ═════════════════════════════════════════════════════ */
-function initVentas(){
-  var grupos=[...new Set(ventasAll.map(function(v){ return v.grupo; }))].sort();
+function updateVentasTab(mes){
+  mes=String(mes);
+  ventasAll=(VENTAS[mes]||[]).slice();
+  ventasFilt=ventasAll.slice();
   var sel=document.getElementById(\'vt-grupo\');
-  grupos.forEach(function(g){
-    var o=document.createElement(\'option\'); o.value=g; o.textContent=g; sel.appendChild(o);
-  });
+  sel.innerHTML=\'<option value="">Todos los grupos</option>\';
+  var grupos=[...new Set(ventasAll.map(function(v){ return v.grupo; }))].sort();
+  grupos.forEach(function(g){ var o=document.createElement(\'option\'); o.value=g; o.textContent=g; sel.appendChild(o); });
+  document.getElementById(\'vt-search\').value=\'\';
+  var totM=0,totC=0;
+  ventasAll.forEach(function(v){ totM+=v.monto; totC+=v.cant; });
+  var mesNom=MESES_NOM[parseInt(mes)]||mes;
+  document.getElementById(\'vt-kpi-monto\').textContent=clp(totM);
+  document.getElementById(\'vt-kpi-mes\').textContent=mesNom+\' ANIO_\';
+  document.getElementById(\'vt-kpi-np\').textContent=ventasAll.length;
+  document.getElementById(\'vt-kpi-ng\').textContent=\'en \'+grupos.length+\' grupos\';
+  document.getElementById(\'vt-card-title\').textContent=\'Ventas por producto — \'+mesNom+\' ANIO_\';
   filterVentas();
 }
 
@@ -1056,8 +1126,39 @@ function renderVentas(){
   tbody.innerHTML=html;
 }
 
+/* ══ TAB POR CLIENTE ════════════════════════════════════════════════ */
+function updateClienteTab(mes){
+  mes=String(mes);
+  var rows=CLIENTE_DATA[mes]||[];
+  var nAct=rows.length, nDup=rows.filter(function(r){ return r.dup; }).length;
+  document.getElementById(\'cli-n\').textContent=nAct;
+  document.getElementById(\'cli-dup\').textContent=nDup;
+  document.getElementById(\'cli-dups\').textContent=nDup>0?\'revisar NVs duplicadas\':\'sin duplicados\';
+  document.getElementById(\'cli-ns\').textContent=nAct+\' clientes en el mes\';
+  var mesNom=MESES_NOM[parseInt(mes)]||mes;
+  document.getElementById(\'cli-card-title\').textContent=\'Análisis por cliente — \'+mesNom+\' ANIO_\';
+  var tbody=document.getElementById(\'cli-tbody\');
+  if(!rows.length){ tbody.innerHTML=\'<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">Sin datos para este periodo.</td></tr>\'; return; }
+  var html=\'\';
+  rows.forEach(function(r){
+    var alertHtml=\'\';
+    if(r.dup) alertHtml+=\'<span style="background:#FEF3C7;color:#D97706;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;margin-right:4px">NV duplic.</span>\';
+    if(r.nv_sf_n>0) alertHtml+=\'<span style="background:#FEF9C3;color:#D97706;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">SF:+\'+r.nv_sf_n+\'</span>\';
+    html+=\'<tr style="border-bottom:1px solid #F3F4F6">\';
+    html+=\'<td style="padding:8px;font-weight:600;text-align:left;border-right:1px solid #E5E7EB;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\'+r.cli+\'">\'+r.cli+\'</td>\';
+    html+=\'<td style="background:#DBEAFE;color:#1E40AF;font-weight:700">\'+( r.coti_n||0)+\'</td>\';
+    html+=\'<td style="background:#DBEAFE;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.coti_m||0)+\'</td>\';
+    html+=\'<td style="background:#DCFCE7;color:#15803D;font-weight:700">\'+( r.nv_n||0)+\'</td>\';
+    html+=\'<td style="background:#DCFCE7;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.nv_m||0)+\'</td>\';
+    html+=\'<td style="background:#FEF9C3;color:#D97706;font-weight:700">\'+( r.nv_sf_n||0)+\'</td>\';
+    html+=\'<td style="background:#FEF9C3;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.nv_sf_m||0)+\'</td>\';
+    html+=\'<td style="text-align:center">\'+( alertHtml||\'<span style="color:#D1D5DB;font-size:11px">—</span>\')+\'</td></tr>\';
+  });
+  tbody.innerHTML=html;
+}
+
 /* ══ NV SIN FACTURAR DRAWER ══════════════════════════════════════════ */
-var MESES_NOM=[\'\'\'Enero\',\'Febrero\',\'Marzo\',\'Abril\',\'Mayo\',\'Junio\',\'Julio\',\'Agosto\',\'Septiembre\',\'Octubre\',\'Noviembre\',\'Diciembre\'];
+var MESES_NOM=[\'\',\'Enero\',\'Febrero\',\'Marzo\',\'Abril\',\'Mayo\',\'Junio\',\'Julio\',\'Agosto\',\'Septiembre\',\'Octubre\',\'Noviembre\',\'Diciembre\'];
 var sfCurrentVend=null;
 
 function showSFDrawer(vend){
@@ -1161,7 +1262,8 @@ updateNVTab(\'MES_\');
 updateFactTab(\'MES_\');
 updatePendTab();
 initStock();
-initVentas();
+updateVentasTab(\'MES_\');
+updateClienteTab(\'MES_\');
 </script>
 </body></html>'''
 
@@ -1174,8 +1276,6 @@ html = (HTML_TEMPLATE
     .replace('ANIO_',    str(anio))
     .replace('GEN_',     gen_str)
     .replace('OPTS_',    opts)
-    .replace('VMONTO_',  clp_py(ventas_total_monto))
-    .replace('VMES_',    nombre_mes)          # must come before MES_
     .replace('MES_',     str(mes_act))
     .replace('RESUMEN_', js_safe(RESUMEN))
     .replace('DATA_',    js_safe(DATA))
@@ -1185,8 +1285,7 @@ html = (HTML_TEMPLATE
     .replace('PENDANIO_',js_safe(PEND_ANIO))
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
-    .replace('VNP_',     str(ventas_n_productos))
-    .replace('VNG_',     str(ventas_n_grupos))
+    .replace('CLIENTE_', js_safe(CLIENTE_DATA))
 )
 
 nombre_archivo = f'Dashboard_NUPROTEC_{anio}.html'
