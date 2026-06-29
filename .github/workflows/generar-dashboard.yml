@@ -2,7 +2,7 @@ name: Generar Dashboard NUPROTEC
 
 on:
   schedule:
-    - cron: '0 9 1 * *'   # 9:00 AM UTC el día 1 de cada mes
+    - cron: '0 11 * * 1-5'  # 8:00 AM Chile (UTC-3) lunes a viernes
   workflow_dispatch:        # Ejecución manual desde la UI de GitHub Actions
 
 jobs:
