@@ -32,7 +32,8 @@ GMAIL_PASS   = os.environ.get('GMAIL_PASS', '')
 MAIL_DESTINO = os.environ.get('MAIL_DESTINO', 'israelojeda1@gmail.com')
 GITHUB_USER  = 'israelojeda1-ops'
 GITHUB_REPO  = 'nuprotec-informes'
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')   # provisto automáticamente por Actions
+GITHUB_TOKEN  = os.environ.get('GITHUB_TOKEN', '')   # provisto automáticamente por Actions
+TRIGGER_TOKEN = os.environ.get('TRIGGER_TOKEN', '')  # PAT con actions:write para el botón Regenerar
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONEXIÓN
@@ -1290,24 +1291,19 @@ function showToast(msg,duration){
   t.textContent=msg; t.classList.add(\'show\');
   setTimeout(function(){ t.classList.remove(\'show\'); },duration||3000);
 }
+var _rtk=\'TRIGGER_TOK_\';
 function regenerarDashboard(){
-  var token=localStorage.getItem(\'gh_token_nuprotec\');
-  if(!token){
-    token=prompt(\'Ingresa tu GitHub Personal Access Token\\n(crearlo en github.com → Settings → Developer settings → Fine-grained tokens)\\n\\nPermiso mínimo: "Actions" → Read and write\');
-    if(!token) return;
-    localStorage.setItem(\'gh_token_nuprotec\',token.trim());
-  }
+  if(!_rtk){ showToast(\'⚠️ Agrega TRIGGER_TOKEN como GitHub Secret y regenera.\',5000); return; }
   var btn=document.getElementById(\'btn-regen\');
   btn.disabled=true; btn.textContent=\'⏳ Enviando...\';
   fetch(\'https://api.github.com/repos/israelojeda1-ops/nuprotec-informes/actions/workflows/generar-dashboard.yml/dispatches\',{
     method:\'POST\',
-    headers:{\'Authorization\':\'Bearer \'+token,\'Content-Type\':\'application/json\',\'Accept\':\'application/vnd.github+json\'},
+    headers:{\'Authorization\':\'Bearer \'+_rtk,\'Content-Type\':\'application/json\',\'Accept\':\'application/vnd.github+json\'},
     body:JSON.stringify({ref:\'main\'})
   }).then(function(r){
     btn.disabled=false; btn.textContent=\'🔄 Regenerar\';
     if(r.status===204){ showToast(\'✅ Generación iniciada — lista en ~3 min. Recarga la página.\',5000); }
-    else if(r.status===401){ localStorage.removeItem(\'gh_token_nuprotec\'); showToast(\'❌ Token inválido. Se eliminó, vuelve a intentarlo.\',4000); }
-    else { showToast(\'❌ Error \'+r.status+\'. Verifica permisos del token.\',4000); }
+    else { showToast(\'❌ Error \'+r.status+\'. Verifica el secret TRIGGER_TOKEN.\',4000); }
   }).catch(function(e){ btn.disabled=false; btn.textContent=\'🔄 Regenerar\'; showToast(\'❌ Error de red: \'+e.message,4000); });
 }
 
@@ -1342,6 +1338,7 @@ html = (HTML_TEMPLATE
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
     .replace('CLIENTE_', js_safe(CLIENTE_DATA))
+    .replace('TRIGGER_TOK_', TRIGGER_TOKEN)
 )
 
 nombre_archivo = f'Dashboard_NUPROTEC_{anio}.html'
