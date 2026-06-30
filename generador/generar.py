@@ -147,6 +147,7 @@ SELECT
     CASE est.NVEstDesp WHEN -1 THEN 'Despachada' WHEN 0 THEN 'Sin despachar'
         ELSE CAST(est.NVEstDesp AS varchar(5)) END AS EstadoDespacho,
     prod.CodGrupo AS Grupo,
+    det.nvLinea AS Linea,
     det.CodProd AS CodProd,
     prod.DesProd AS Producto,
     det.nvCant AS Cantidad,
@@ -348,6 +349,7 @@ def _build_nv_detail(df_slice):
         nvs = []
         for nv_num, nv_rows in dv.groupby('NroNV'):
             first = nv_rows.iloc[0]
+            nv_rows = nv_rows.drop_duplicates('Linea')
             lineas = []
             for _, r in nv_rows.iterrows():
                 lineas.append({
@@ -496,8 +498,10 @@ for m in range(1, 13):
     dfn = df_nv[df_nv['Mes'] == m]
     for cli, grp in dfn.groupby('Cliente'):
         uniq_nv = grp.drop_duplicates('NroNV')
-        # Neto por NV = suma de líneas (nvTotLinea), sin IVA
-        neto_por_nv = grp.groupby('NroNV')['ValorLinea'].sum()
+        # Neto por NV = suma de líneas (nvTotLinea), sin IVA.
+        # Se deduplica por (NroNV, Linea) porque el LEFT JOIN a facturas
+        # multiplica las líneas cuando una NV tiene más de una factura.
+        neto_por_nv = grp.drop_duplicates(['NroNV', 'Linea']).groupby('NroNV')['ValorLinea'].sum()
         sf_set = set(uniq_nv[uniq_nv['EstadoFacturacion'] == 'Sin facturar']['NroNV'])
         fa_set = set(uniq_nv[uniq_nv['EstadoFacturacion'] == 'Facturada']['NroNV'])
         # Facturado neto = suma de facturas distintas (NetoAfecto + NetoExento)
@@ -539,6 +543,7 @@ for m in range(1, 13):
         nvs = []
         for nv_num, nvr in grp.groupby('NroNV'):
             first = nvr.iloc[0]
+            nvr = nvr.drop_duplicates('Linea')
             lins = [{
                 'cod':   str(r['CodProd']).strip()  if pd.notna(r.get('CodProd'))  else '',
                 'prod':  str(r['Producto']).strip() if pd.notna(r.get('Producto')) else '',
