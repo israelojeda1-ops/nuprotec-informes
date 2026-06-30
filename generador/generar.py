@@ -781,7 +781,7 @@ var NV_SF_DET  = NV_SF_DET_;
 var NV_DET     = NV_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
-var PEND_ANIO  = PENDANIO_;
+var PEND_ANIO  = PNDANO_;
 var STOCK         = STOCK_;
 var VENTAS        = VENTAS_;
 var CLIENTE_DATA  = CLIDAT_;
@@ -1332,7 +1332,7 @@ html = (HTML_TEMPLATE
     .replace('NV_DET_',  js_safe(NV_DET))
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
-    .replace('PENDANIO_',js_safe(PEND_ANIO))
+    .replace('PNDANO_',  js_safe(PEND_ANIO))
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
     .replace('CLIDAT_', js_safe(CLIENTE_DATA))
