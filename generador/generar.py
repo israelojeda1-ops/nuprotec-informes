@@ -5,7 +5,7 @@ Uso local : DB_PASSWORD=xxx GMAIL_PASS=xxx python generador/generar.py
 GitHub    : configurar Secrets DB_PASSWORD y GMAIL_PASS en el repositorio
 """
 
-import os, json, base64, smtplib, urllib.request
+import os, json, base64, smtplib, urllib.request, subprocess
 import pyodbc, pandas as pd
 from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
@@ -59,6 +59,14 @@ gen_str    = now.strftime('%d/%m/%Y %H:%M') + ' CLT'
 MESES      = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 nombre_mes = f'{MESES[mes_act]} {anio}'
+
+# Versión trazable: SHA corto del commit + fecha/hora de generación
+try:
+    _sha = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
+                                   text=True, stderr=subprocess.DEVNULL).strip()
+except Exception:
+    _sha = 'local'
+VERSION = f"{now.strftime('%Y.%m.%d.%H%M')}-{_sha}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # QUERIES
@@ -1517,20 +1525,31 @@ pm_m  = sum(r['Pendiente_Monto'] for r in datos_m)
 pc_m  = round(nv_m / tn_m * 100, 1) if tn_m else 0
 url_pub = f'https://{GITHUB_USER}.github.io/{GITHUB_REPO}/{nombre_archivo}'
 
-filas_m = ''.join(
-    f"<tr><td>{r['Vendedor']}</td>"
-    f"<td>{r['Pendiente_N']}</td><td>{clp_py(r['Pendiente_Monto'])}</td>"
-    f"<td>{r['EnNV_N']}</td><td>{clp_py(r['EnNV_Monto'])}</td>"
-    f"<td>{r['Total_N']}</td><td>{clp_py(r['Total_Monto'])}</td>"
-    f"<td style='color:#1D4ED8;font-weight:600'>{r['Pct_Conv']}%</td></tr>"
-    for r in sorted(datos_m, key=lambda x: -x['Total_Monto'])
+# ── Estado actual del sistema (para seguimiento / recuperación) ───────────────
+mk         = str(mes_act)
+coti_mes_n = int(df_cotizaciones[df_cotizaciones['Mes'] == mes_act]['NroCotizacion'].nunique())
+nv_mes_n   = int(df_nv[df_nv['Mes'] == mes_act]['NroNV'].nunique())
+fact_docs  = int(len(df_fact[df_fact['Mes'] == mes_act]))
+stock_n    = int(len(STOCK_DATA))
+clientes_n = len(CLIENTE_DATA.get(mk, []))
+neto_fact  = FACT_CV.get(mk, {}).get('granTotal', 0)
+
+estado_items = [
+    ('Versión',              VERSION),
+    ('Generado',             gen_str),
+    ('Cotizaciones del mes', f'{coti_mes_n}'),
+    ('Notas de venta del mes', f'{nv_mes_n}'),
+    ('Documentos facturación', f'{fact_docs}'),
+    ('Facturación neta mes',  clp_py(neto_fact)),
+    ('Ítems de stock',        f'{stock_n}'),
+    ('Clientes activos',      f'{clientes_n}'),
+]
+filas_estado = ''.join(
+    f"<tr><td>{k}</td><td style='font-weight:600;color:#1B2A4E'>{v}</td></tr>"
+    for k, v in estado_items
 )
-filas_m += (
-    f"<tr style='background:#F9FAFB;font-weight:700;border-top:2px solid #E5E7EB'>"
-    f"<td>TOTAL</td><td>{pn_m}</td><td>{clp_py(pm_m)}</td>"
-    f"<td>{nv_m}</td><td>—</td><td>{tn_m}</td><td>{clp_py(tm_m)}</td>"
-    f"<td style='color:#1D4ED8'>{pc_m}%</td></tr>"
-)
+modulos_ok = ('Cotizaciones · Notas de Venta · Pendientes Año · Stock · '
+              'Ventas Mes · Por Cliente (Informe Excel) · Facturación (vendedor + canal)')
 
 MAIL_HTML = f"""<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>
 <style>
@@ -1556,30 +1575,29 @@ td:first-child{{text-align:left;font-weight:500}}
 <div class='wrap'>
   <div class='top'>
     <h1>Dashboard Comercial &mdash; {nombre_mes}</h1>
-    <p>N&Uuml;PROTEC SpA &middot; {gen_str}</p>
+    <p>N&Uuml;PROTEC SpA &middot; {gen_str} &middot; v{VERSION}</p>
   </div>
   <div class='body'>
     <p style="font-size:13px;color:#374151;margin-bottom:15px;">
-      Estimados, se adjunta el resumen comercial del periodo. Ver el dashboard completo en el link al final.
+      Correo de seguimiento de la actualizaci&oacute;n del dashboard. A continuaci&oacute;n el estado actual del sistema (sirve de respaldo para retomar en caso de fallas).
     </p>
     <div class='kpis'>
       <div class='kpi'><div class='kpi-lbl'>Cotizaciones</div><div class='kpi-val'>{tn_m}</div><div class='kpi-sub'>{clp_py(tm_m)}</div></div>
       <div class='kpi'><div class='kpi-lbl'>En NV</div><div class='kpi-val'>{nv_m}</div><div class='kpi-sub'>{pc_m}% conv.</div></div>
       <div class='kpi'><div class='kpi-lbl'>Pendientes</div><div class='kpi-val'>{pn_m}</div><div class='kpi-sub'>{clp_py(pm_m)}</div></div>
     </div>
-    <table><thead><tr>
-      <th>Vendedor</th><th>Pend.</th><th>Monto</th>
-      <th>En NV</th><th>Monto</th><th>Total</th><th>Monto</th><th>Conv.</th>
-    </tr></thead><tbody>{filas_m}</tbody></table>
+    <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;margin:4px 0 6px">Estado actual</div>
+    <table><tbody>{filas_estado}</tbody></table>
+    <div style="font-size:11px;color:#6B7280;margin:-4px 0 14px"><strong>M&oacute;dulos activos:</strong> {modulos_ok}</div>
     <a href='{url_pub}' class='btn'>Ver dashboard completo &rarr;</a>
   </div>
-  <div class='footer'>N&Uuml;PROTEC SpA &mdash; Generado autom&aacute;ticamente</div>
+  <div class='footer'>N&Uuml;PROTEC SpA &mdash; Generado autom&aacute;ticamente &middot; v{VERSION}</div>
 </div></body></html>"""
 
 if GMAIL_PASS:
     try:
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'Dashboard Comercial NUPROTEC — {nombre_mes}'
+        msg['Subject'] = f'Dashboard Comercial NUPROTEC — {nombre_mes} (v{VERSION})'
         msg['From']    = GMAIL_USER
         msg['To']      = MAIL_DESTINO
         msg.attach(MIMEText(MAIL_HTML, 'html'))
