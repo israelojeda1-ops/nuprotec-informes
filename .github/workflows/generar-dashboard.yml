@@ -31,7 +31,7 @@ jobs:
           DB_PASSWORD:   ${{ secrets.DB_PASSWORD }}
           GMAIL_PASS:    ${{ secrets.GMAIL_PASS }}
           MAIL_DESTINO:  ${{ vars.MAIL_DESTINO }}
-          TRIGGER_TOKEN: ${{ secrets.TokenRegenerar }}
+          TRIGGER_TOKEN: ${{ secrets.TOKENREGENERAR }}
         run: python generador/generar.py
 
       - name: Publicar HTML en el repositorio
