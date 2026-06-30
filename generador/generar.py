@@ -431,24 +431,65 @@ for m in range(1, 13):
         uniq = grp.drop_duplicates('NroCotizacion')
         clientes.setdefault(cli, {}).update({
             'coti_n': len(uniq), 'coti_m': float(uniq['NetoCotizacion'].sum()),
-            'nv_n': 0, 'nv_m': 0.0, 'nv_sf_n': 0, 'nv_sf_m': 0.0, 'dup': False
+            'nv_n': 0, 'nv_m': 0.0, 'nv_sf_n': 0, 'nv_sf_m': 0.0,
+            'fac_n': 0, 'fac_m': 0.0, 'dup': False
         })
     # NVs del mes
     dfn = df_nv[df_nv['Mes'] == m]
     for cli, grp in dfn.groupby('Cliente'):
         uniq_nv = grp.drop_duplicates('NroNV')
         sf = uniq_nv[uniq_nv['EstadoFacturacion'] == 'Sin facturar']
+        fa = uniq_nv[uniq_nv['EstadoFacturacion'] == 'Facturada']
         montos = list(uniq_nv['MontoNV'])
         dup = len(montos) != len(set(montos)) and len(montos) > 0
         clientes.setdefault(cli, {'coti_n': 0, 'coti_m': 0.0}).update({
             'nv_n': len(uniq_nv), 'nv_m': float(uniq_nv['MontoNV'].sum()),
             'nv_sf_n': len(sf), 'nv_sf_m': float(sf['MontoNV'].sum()),
+            'fac_n': len(fa), 'fac_m': float(fa['MontoNV'].sum()),
             'dup': dup
         })
     CLIENTE_DATA[str(m)] = sorted(
         [{'cli': cli, **vals} for cli, vals in clientes.items()],
         key=lambda x: -(x.get('nv_m', 0) + x.get('coti_m', 0))
     )
+
+# ── Detalle por Cliente (para descarga Excel) ────────────────────────────────
+# CLI_DET[mes][cliente] = {cotis:[...], nvs:[...con líneas...]}
+CLI_DET = {}
+for m in range(1, 13):
+    det_cli = {}
+    dfc = df_cotizaciones[df_cotizaciones['Mes'] == m]
+    for cli, grp in dfc.groupby('Cliente'):
+        uniq = grp.drop_duplicates('NroCotizacion')
+        cotis = [{
+            'n':      int(r['NroCotizacion']),
+            'fecha':  str(r['Fecha']),
+            'estado': str(r['Estado']),
+            'monto':  float(r['NetoCotizacion']) if pd.notna(r['NetoCotizacion']) else 0,
+            'nv':     int(r['NroNV']) if pd.notna(r['NroNV']) else 0,
+        } for _, r in uniq.iterrows()]
+        det_cli.setdefault(str(cli).strip(), {'cotis': [], 'nvs': []})['cotis'] = cotis
+    dfn = df_nv[df_nv['Mes'] == m]
+    for cli, grp in dfn.groupby('Cliente'):
+        nvs = []
+        for nv_num, nvr in grp.groupby('NroNV'):
+            first = nvr.iloc[0]
+            lins = [{
+                'cod':   str(r['CodProd']).strip()  if pd.notna(r.get('CodProd'))  else '',
+                'prod':  str(r['Producto']).strip() if pd.notna(r.get('Producto')) else '',
+                'cant':  float(r['Cantidad'])       if pd.notna(r.get('Cantidad')) else 0,
+                'monto': float(r['ValorLinea'])     if pd.notna(r['ValorLinea'])   else 0,
+            } for _, r in nvr.iterrows()]
+            nvs.append({
+                'nv':      int(nv_num),
+                'oc':      str(first['OrdenCompra']).strip() if pd.notna(first['OrdenCompra']) else '',
+                'fact':    str(first['EstadoFacturacion']),
+                'factura': str(first['NroFactura']).strip() if pd.notna(first['NroFactura']) else '',
+                'monto':   float(first['MontoNV']) if pd.notna(first['MontoNV']) else 0,
+                'lins':    lins,
+            })
+        det_cli.setdefault(str(cli).strip(), {'cotis': [], 'nvs': []})['nvs'] = nvs
+    CLI_DET[str(m)] = det_cli
 
 # ── Tab Stock ─────────────────────────────────────────────────────────────────
 STOCK_DATA = [
@@ -749,9 +790,12 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
             <th style="background:#DBEAFE;border-right:1px solid #E5E7EB">Cotiz. Monto</th>
             <th style="background:#DCFCE7">NVs N&deg;</th>
             <th style="background:#DCFCE7;border-right:1px solid #E5E7EB">NVs Monto</th>
+            <th style="background:#D1FAE5">Facturado N&deg;</th>
+            <th style="background:#D1FAE5;border-right:1px solid #E5E7EB">Facturado Monto</th>
             <th style="background:#FEF9C3">Sin Fact. N&deg;</th>
             <th style="background:#FEF9C3;border-right:1px solid #E5E7EB">Sin Fact. Monto</th>
             <th>Alerta</th>
+            <th>Detalle</th>
           </tr></thead>
           <tbody id="cli-tbody"></tbody>
         </table>
@@ -786,6 +830,7 @@ var PEND_ANIO  = PNDANO_;
 var STOCK         = STOCK_;
 var VENTAS        = VENTAS_;
 var CLIENTE_DATA  = CLIDAT_;
+var CLI_DET       = CLIDET_;
 var Q          = String.fromCharCode(39);
 var mesActual  = \'MES_\';
 var lastRow    = null;
@@ -1155,7 +1200,7 @@ function updateClienteTab(mes){
   var mesNom=MESES_NOM[parseInt(mes)]||mes;
   document.getElementById(\'cli-card-title\').textContent=\'Análisis por cliente — \'+mesNom+\' ANIO_\';
   var tbody=document.getElementById(\'cli-tbody\');
-  if(!rows.length){ tbody.innerHTML=\'<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">Sin datos para este periodo.</td></tr>\'; return; }
+  if(!rows.length){ tbody.innerHTML=\'<tr><td colspan="11" style="text-align:center;padding:40px;color:#9CA3AF">Sin datos para este periodo.</td></tr>\'; return; }
   var html=\'\';
   rows.forEach(function(r){
     var alertHtml=\'\';
@@ -1167,11 +1212,57 @@ function updateClienteTab(mes){
     html+=\'<td style="background:#DBEAFE;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.coti_m||0)+\'</td>\';
     html+=\'<td style="background:#DCFCE7;color:#15803D;font-weight:700">\'+( r.nv_n||0)+\'</td>\';
     html+=\'<td style="background:#DCFCE7;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.nv_m||0)+\'</td>\';
+    html+=\'<td style="background:#D1FAE5;color:#15803D;font-weight:700">\'+( r.fac_n||0)+\'</td>\';
+    html+=\'<td style="background:#D1FAE5;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.fac_m||0)+\'</td>\';
     html+=\'<td style="background:#FEF9C3;color:#D97706;font-weight:700">\'+( r.nv_sf_n||0)+\'</td>\';
     html+=\'<td style="background:#FEF9C3;text-align:right;border-right:1px solid #E5E7EB">\'+clp(r.nv_sf_m||0)+\'</td>\';
-    html+=\'<td style="text-align:center">\'+( alertHtml||\'<span style="color:#D1D5DB;font-size:11px">—</span>\')+\'</td></tr>\';
+    html+=\'<td style="text-align:center">\'+( alertHtml||\'<span style="color:#D1D5DB;font-size:11px">—</span>\')+\'</td>\';
+    var cliEsc=r.cli.replace(/\\\\/g,\'\\\\\\\\\').replace(/\'/g,"\\\\\'");
+    html+=\'<td style="text-align:center"><button onclick="exportClienteDetalle(\\\'\'+cliEsc+\'\\\')" style="background:var(--nu-blue);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">&#x2B07; Detalle</button></td></tr>\';
   });
   tbody.innerHTML=html;
+}
+
+/* ══ INFORME CLIENTE (descarga Excel) ═══════════════════════════════ */
+function exportClienteDetalle(cli){
+  var mes=mesActual;
+  var d=(CLI_DET[mes]&&CLI_DET[mes][cli])||{cotis:[],nvs:[]};
+  var mesNom=MESES_NOM[parseInt(mes)]||mes;
+  var totCoti=0,totNV=0,totFac=0,totSF=0;
+  (d.cotis||[]).forEach(function(c){ totCoti+=c.monto||0; });
+  (d.nvs||[]).forEach(function(n){ totNV+=n.monto||0; if(n.fact===\'Facturada\') totFac+=n.monto||0; else totSF+=n.monto||0; });
+  var wb=XLSX.utils.book_new();
+  /* Hoja Resumen (incluye espacio para la deuda del cliente) */
+  var res=[
+    [\'INFORME CLIENTE\'],
+    [\'Cliente\', cli],
+    [\'Periodo\', mesNom+\' ANIO_\'],
+    [],
+    [\'Total cotizado\',        totCoti],
+    [\'Total notas de venta\',  totNV],
+    [\'Total facturado\',       totFac],
+    [\'Total sin facturar\',    totSF],
+    [],
+    [\'Deuda del cliente (saldo pendiente)\', \'— pendiente de integrar —\'],
+  ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(res),\'Resumen\');
+  /* Hoja Cotizaciones */
+  var cot=[[\'N° Cotización\',\'Fecha\',\'Estado\',\'Monto neto\',\'NV asociada\']];
+  (d.cotis||[]).forEach(function(c){ cot.push([c.n,c.fecha,c.estado,c.monto,c.nv||\'\']); });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(cot),\'Cotizaciones\');
+  /* Hoja Notas de Venta (resumen) */
+  var nvr=[[\'N° NV\',\'OC\',\'Estado fact.\',\'N° Factura\',\'Monto NV\']];
+  (d.nvs||[]).forEach(function(n){ nvr.push([n.nv,n.oc,n.fact,n.factura,n.monto]); });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(nvr),\'Notas de Venta\');
+  /* Hoja Detalle productos NV */
+  var det=[[\'N° NV\',\'Estado fact.\',\'N° Factura\',\'Código\',\'Producto\',\'Cantidad\',\'Monto línea\']];
+  (d.nvs||[]).forEach(function(n){
+    if(n.lins&&n.lins.length){ n.lins.forEach(function(l){ det.push([n.nv,n.fact,n.factura,l.cod,l.prod,l.cant,l.monto]); }); }
+    else { det.push([n.nv,n.fact,n.factura,\'\',\'(sin detalle)\',\'\',n.monto]); }
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(det),\'Detalle productos\');
+  var safe=cli.replace(/[^A-Za-z0-9]+/g,\'_\').slice(0,40);
+  XLSX.writeFile(wb,\'Informe_Cliente_\'+safe+\'_\'+mesNom+\'_ANIO_.xlsx\');
 }
 
 /* ══ NV SIN FACTURAR DRAWER ══════════════════════════════════════════ */
@@ -1337,6 +1428,7 @@ html = (HTML_TEMPLATE
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
     .replace('CLIDAT_', js_safe(CLIENTE_DATA))
+    .replace('CLIDET_', js_safe(CLI_DET))
     .replace('TRIGGER_TOK_', __import__('base64').b64encode(TRIGGER_TOKEN.encode()).decode() if TRIGGER_TOKEN else '')
 )
 
