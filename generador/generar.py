@@ -496,14 +496,21 @@ for m in range(1, 13):
     dfn = df_nv[df_nv['Mes'] == m]
     for cli, grp in dfn.groupby('Cliente'):
         uniq_nv = grp.drop_duplicates('NroNV')
-        sf = uniq_nv[uniq_nv['EstadoFacturacion'] == 'Sin facturar']
-        fa = uniq_nv[uniq_nv['EstadoFacturacion'] == 'Facturada']
+        # Neto por NV = suma de líneas (nvTotLinea), sin IVA
+        neto_por_nv = grp.groupby('NroNV')['ValorLinea'].sum()
+        sf_set = set(uniq_nv[uniq_nv['EstadoFacturacion'] == 'Sin facturar']['NroNV'])
+        fa_set = set(uniq_nv[uniq_nv['EstadoFacturacion'] == 'Facturada']['NroNV'])
+        # Facturado neto = suma de facturas distintas (NetoAfecto + NetoExento)
+        fac_m = float(grp.dropna(subset=['NroFactura'])
+                         .groupby('NroFactura')['MontoFactura'].first().sum()) \
+                if grp['NroFactura'].notna().any() else 0.0
         montos = list(uniq_nv['MontoNV'])
         dup = len(montos) != len(set(montos)) and len(montos) > 0
         clientes.setdefault(cli, {'coti_n': 0, 'coti_m': 0.0}).update({
-            'nv_n': len(uniq_nv), 'nv_m': float(uniq_nv['MontoNV'].sum()),
-            'nv_sf_n': len(sf), 'nv_sf_m': float(sf['MontoNV'].sum()),
-            'fac_n': len(fa), 'fac_m': float(fa['MontoNV'].sum()),
+            'nv_n': len(uniq_nv), 'nv_m': float(neto_por_nv.sum()),
+            'nv_sf_n': len(sf_set),
+            'nv_sf_m': float(neto_por_nv[neto_por_nv.index.isin(sf_set)].sum()),
+            'fac_n': len(fa_set), 'fac_m': fac_m,
             'dup': dup
         })
     CLIENTE_DATA[str(m)] = sorted(
