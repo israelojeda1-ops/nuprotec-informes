@@ -194,9 +194,11 @@ SELECT
                   WHEN 'D' THEN 'Nota de Debito' WHEN 'B' THEN 'Boleta'
                   ELSE CAB.Tipo END AS Tipo,
     ISNULL(VEN.VenDes,'Sin vendedor') AS Vendedor,
+    ISNULL(CAN.CanDes,'Sin canal') AS Canal,
     CAB.NetoAfecto + CAB.NetoExento AS MontoNeto
 FROM NUPROTEC1.softland.iw_gsaen AS CAB
 LEFT JOIN NUPROTEC1.softland.cwtvend AS VEN ON CAB.CodVendedor=VEN.VenCod
+LEFT JOIN NUPROTEC1.softland.cwtcana AS CAN ON CAB.CanCod=CAN.CanCod
 WHERE YEAR(CAB.Fecha)={anio}
   AND CAB.Tipo IN ('F','N','D','B')
   AND CAB.Estado='V' AND CAB.EnMantencion<>-1
@@ -387,6 +389,38 @@ for m in range(1, 13):
             'MontoNeto':  bruto - nc,
         })
     FACT_RESUMEN[str(m)].sort(key=lambda x: -x['MontoNeto'])
+
+# ── Facturación por Canal × Vendedor (pivote, neto) ──────────────────────────
+def _neto(slice_df):
+    bruto = float(slice_df[slice_df['Tipo'].isin(['Factura','Boleta'])]['MontoNeto'].sum())
+    nc    = abs(float(slice_df[slice_df['Tipo'] == 'Nota de Credito']['MontoNeto'].sum()))
+    return bruto - nc
+
+FACT_CV = {}
+for m in range(1, 13):
+    dfm = df_fact[df_fact['Mes'] == m]
+    if dfm.empty:
+        FACT_CV[str(m)] = {'vendedores': [], 'rows': [], 'colTotals': {}, 'granTotal': 0}
+        continue
+    vendedores = sorted(str(v).strip() for v in dfm['Vendedor'].unique())
+    rows = []
+    col_tot = {v: 0.0 for v in vendedores}
+    for canal, dc in dfm.groupby('Canal'):
+        vals = {}
+        fila_tot = 0.0
+        for v in vendedores:
+            neto = _neto(dc[dc['Vendedor'].astype(str).str.strip() == v])
+            vals[v] = neto
+            col_tot[v] += neto
+            fila_tot += neto
+        rows.append({'Canal': str(canal).strip(), 'Vals': vals, 'Total': fila_tot})
+    rows.sort(key=lambda x: -x['Total'])
+    FACT_CV[str(m)] = {
+        'vendedores': vendedores,
+        'rows': rows,
+        'colTotals': col_tot,
+        'granTotal': sum(col_tot.values()),
+    }
 
 # ── Tab Pendientes Año: PEND_ANIO ─────────────────────────────────────────────
 PEND_ANIO = {}
@@ -721,6 +755,13 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
         <tbody id="fact-tbody"></tbody>
       </table>
     </div>
+    <div class="card">
+      <div class="card-title">Facturaci&oacute;n por canal de venta &mdash; neto por vendedor</div>
+      <table class="main">
+        <thead><tr id="fcanal-head"></tr></thead>
+        <tbody id="fcanal-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- ════ TAB 5: STOCK ════ -->
@@ -826,6 +867,7 @@ var NV_SF_DET  = NV_SF_DET_;
 var NV_DET     = NV_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
+var FACT_CV    = FACTCV_;
 var PEND_ANIO  = PNDANO_;
 var STOCK         = STOCK_;
 var VENTAS        = VENTAS_;
@@ -1091,6 +1133,31 @@ function updateFactTab(mes){
   html+=\'<td>\'+s.nc_n+\'</td><td style="text-align:right;color:#721c24;border-right:1px solid #E5E7EB">\'+clp(s.nc)+\'</td>\';
   html+=\'<td style="text-align:right;color:var(--nu-blue)">\'+clp(s.nt)+\'</td></tr>\';
   tbody.innerHTML=html;
+  renderCanalPivot(mes);
+}
+
+/* ══ Facturación por canal × vendedor (pivote) ══════════════════════ */
+function renderCanalPivot(mes){
+  var d=FACT_CV[String(mes)]||{vendedores:[],rows:[],colTotals:{},granTotal:0};
+  var vends=d.vendedores||[];
+  var head=\'<th style="text-align:left;border-right:1px solid #E5E7EB">Canal</th>\';
+  vends.forEach(function(v){ head+=\'<th>\'+v+\'</th>\'; });
+  head+=\'<th style="border-left:1px solid #E5E7EB">Total</th>\';
+  document.getElementById(\'fcanal-head\').innerHTML=head;
+  var tb=document.getElementById(\'fcanal-tbody\');
+  if(!d.rows.length){ tb.innerHTML=\'<tr><td colspan="\'+(vends.length+2)+\'" style="text-align:center;padding:40px;color:#9CA3AF">Sin datos.</td></tr>\'; return; }
+  var html=\'\';
+  d.rows.forEach(function(r){
+    html+=\'<tr style="border-bottom:1px solid #E5E7EB">\';
+    html+=\'<td style="padding:8px;font-weight:600;text-align:left;border-right:1px solid #E5E7EB">\'+r.Canal+\'</td>\';
+    vends.forEach(function(v){ var x=r.Vals[v]||0; html+=\'<td style="text-align:right">\'+(x?clp(x):\'&mdash;\')+\'</td>\'; });
+    html+=\'<td style="text-align:right;font-weight:700;color:var(--nu-blue);border-left:1px solid #E5E7EB">\'+clp(r.Total)+\'</td></tr>\';
+  });
+  html+=\'<tr style="background:#F3F4F6;border-top:2px solid #D1D5DB;font-weight:700">\';
+  html+=\'<td style="padding:8px;text-align:left;border-right:1px solid #E5E7EB;font-size:11px;text-transform:uppercase;color:#374151">TOTAL</td>\';
+  vends.forEach(function(v){ html+=\'<td style="text-align:right">\'+clp(d.colTotals[v]||0)+\'</td>\'; });
+  html+=\'<td style="text-align:right;color:var(--nu-blue);border-left:1px solid #E5E7EB">\'+clp(d.granTotal||0)+\'</td></tr>\';
+  tb.innerHTML=html;
 }
 
 /* ══ TAB STOCK ══════════════════════════════════════════════════════ */
@@ -1424,6 +1491,7 @@ html = (HTML_TEMPLATE
     .replace('NV_DET_',  js_safe(NV_DET))
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
+    .replace('FACTCV_',  js_safe(FACT_CV))
     .replace('PNDANO_',  js_safe(PEND_ANIO))
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
