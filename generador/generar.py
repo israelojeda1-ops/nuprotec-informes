@@ -451,6 +451,22 @@ for m in range(1, 13):
         })
     PEND_ANIO[str(m)].sort(key=lambda x: -x['Monto'])
 
+# Detalle de cotizaciones pendientes (para descarga Excel)
+PEND_DET = {}
+for m in range(1, 13):
+    dfm = df_cotizaciones[
+        (df_cotizaciones['Mes'] == m) & (df_cotizaciones['Estado'] == 'Pendiente')
+    ].drop_duplicates('NroCotizacion')
+    PEND_DET[str(m)] = [{
+        'n':        int(r['NroCotizacion']),
+        'fecha':    str(r['Fecha']),
+        'cliente':  str(r['Cliente']).strip(),
+        'vendedor': str(r['Vendedor']).strip(),
+        'monto':    float(r['NetoCotizacion']) if pd.notna(r['NetoCotizacion']) else 0,
+        'vence':    str(r['FechaVencimiento']) if pd.notna(r['FechaVencimiento']) else '',
+        'alerta':   str(r['Alerta']),
+    } for _, r in dfm.iterrows()]
+
 # ── Tab Ventas Mes ────────────────────────────────────────────────────────────
 VENTAS_DATA = {}
 for m in range(1, 13):
@@ -738,6 +754,10 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
 
   <!-- ════ TAB 3: PENDIENTES AÑO ════ -->
   <div id="tab-pendientes" class="tab-content">
+    <div class="export-bar">
+      <button class="btn-export primary" onclick="exportPendExcel(\'mes\')">&#11015; Excel pendientes (mes)</button>
+      <button class="btn-export secondary" onclick="exportPendExcel(\'todo\')">&#11015; Excel pendientes (a&ntilde;o)</button>
+    </div>
     <div class="card">
       <div class="card-title">Cotizaciones pendientes por mes &mdash; Acumulado a&ntilde;o completo</div>
       <div id="pend-content" style="overflow-x:auto"></div>
@@ -877,6 +897,7 @@ var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var FACT_CV    = FACTCV_;
 var PEND_ANIO  = PNDANO_;
+var PEND_DET   = PNDDET_;
 var STOCK         = STOCK_;
 var VENTAS        = VENTAS_;
 var CLIENTE_DATA  = CLIDAT_;
@@ -1108,6 +1129,22 @@ function updatePendTab(){
   });
   html+=\'</tbody></table>\';
   document.getElementById(\'pend-content\').innerHTML=html;
+}
+
+function exportPendExcel(scope){
+  if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
+  var wb=XLSX.utils.book_new();
+  function addSheet(m){
+    var rows=PEND_DET[String(m)]||[];
+    var d=[[\'N° Cotización\',\'Fecha\',\'Cliente\',\'Vendedor\',\'Monto neto\',\'Vencimiento\',\'Alerta\']];
+    rows.forEach(function(r){ d.push([r.n,r.fecha,r.cliente,r.vendedor,r.monto,r.vence,r.alerta]); });
+    var ws=XLSX.utils.aoa_to_sheet(d);
+    ws[\'!cols\']=[{wch:12},{wch:12},{wch:30},{wch:22},{wch:14},{wch:12},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,ws,MESES_NOM[m]||String(m));
+  }
+  if(scope===\'mes\'){ addSheet(parseInt(mesActual)); }
+  else { for(var m=1;m<=12;m++) addSheet(m); }
+  XLSX.writeFile(wb,\'Cotis_Pendientes_\'+(scope===\'mes\'?MESES_NOM[parseInt(mesActual)]:\'Año\')+\'_ANIO_.xlsx\');
 }
 
 /* ══ TAB FACTURACIÓN ════════════════════════════════════════════════ */
@@ -1501,6 +1538,7 @@ html = (HTML_TEMPLATE
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
     .replace('FACTCV_',  js_safe(FACT_CV))
     .replace('PNDANO_',  js_safe(PEND_ANIO))
+    .replace('PNDDET_',  js_safe(PEND_DET))
     .replace('STOCK_',   js_safe(STOCK_DATA))
     .replace('VENTAS_',  js_safe(VENTAS_DATA))
     .replace('CLIDAT_', js_safe(CLIENTE_DATA))
