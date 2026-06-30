@@ -7,14 +7,7 @@ GitHub    : configurar Secrets DB_PASSWORD y GMAIL_PASS en el repositorio
 
 import os, json, base64, smtplib, urllib.request
 import pyodbc, pandas as pd
-from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-
-import os, json, base64, smtplib, urllib.request
-import pyodbc, pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -56,10 +49,13 @@ def qdf(sql):
 # ══════════════════════════════════════════════════════════════════════════════
 # FECHAS
 # ══════════════════════════════════════════════════════════════════════════════
-now        = datetime.now()
+now_utc    = datetime.now(timezone.utc)
+# Chile: UTC-4 en invierno (abr-oct), UTC-3 en verano (oct-mar)
+chile_offset = -4 if 4 <= now_utc.month <= 9 else -3
+now        = now_utc + timedelta(hours=chile_offset)
 anio       = now.year
 mes_act    = now.month
-gen_str    = now.strftime('%d/%m/%Y %H:%M')
+gen_str    = now.strftime('%d/%m/%Y %H:%M') + ' CLT'
 MESES      = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 nombre_mes = f'{MESES[mes_act]} {anio}'
