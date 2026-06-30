@@ -376,7 +376,8 @@ for m in range(1, 13):
         continue
     for vend, dv in dfm.groupby('Vendedor'):
         bruto = float(dv[dv['Tipo'].isin(['Factura','Boleta'])]['MontoNeto'].sum())
-        nc    = float(dv[dv['Tipo'] == 'Nota de Credito']['MontoNeto'].sum())
+        # Las NC se guardan con MontoNeto negativo en Softland; usar magnitud
+        nc    = abs(float(dv[dv['Tipo'] == 'Nota de Credito']['MontoNeto'].sum()))
         FACT_RESUMEN[str(m)].append({
             'Vendedor':   str(vend).strip(),
             'N_Facturas': int(len(dv[dv['Tipo'].isin(['Factura','Boleta'])])),
@@ -1025,7 +1026,7 @@ function updateFactTab(mes){
   document.getElementById(\'f-nc\').textContent=clp(nc);
   document.getElementById(\'f-nc-n\').textContent=nnc+\' NC emitidas\';
   document.getElementById(\'f-neto\').textContent=clp(neto);
-  document.getElementById(\'f-neto-s\').textContent=\'despu&eacute;s de NC\';
+  document.getElementById(\'f-neto-s\').textContent=\'despu\\u00e9s de NC\';
   var tbody=document.getElementById(\'fact-tbody\');
   if(!rows.length){ tbody.innerHTML=\'<tr><td colspan="6" style="text-align:center;padding:40px;color:#9CA3AF">Sin datos.</td></tr>\'; return; }
   var html=\'\'; var s={nf:0,mb:0,nc_n:0,nc:0,nt:0};
