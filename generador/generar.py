@@ -783,6 +783,10 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
       <div class="kpi"><div class="kpi-lbl">Notas de cr&eacute;dito</div><div id="f-nc" class="kpi-val">$0</div><div id="f-nc-n" class="kpi-sub">0 NC</div></div>
       <div class="kpi"><div class="kpi-lbl">Neto mes</div><div id="f-neto" class="kpi-val">$0</div><div id="f-neto-s" class="kpi-sub">despu&eacute;s de NC</div></div>
     </div>
+    <div class="export-bar">
+      <button class="btn-export primary" onclick="exportFactExcel(\'mes\')">&#11015; Detalle del mes (canal y vendedor)</button>
+      <button class="btn-export secondary" onclick="exportFactExcel(\'todo\')">&#11015; Detalle del a&ntilde;o (canal y vendedor)</button>
+    </div>
     <div class="card">
       <div class="card-title">Facturaci&oacute;n por vendedor</div>
       <table class="main">
@@ -1215,6 +1219,33 @@ function renderCanalPivot(mes){
   vends.forEach(function(v){ html+=\'<td style="text-align:right">\'+clp(d.colTotals[v]||0)+\'</td>\'; });
   html+=\'<td style="text-align:right;color:var(--nu-blue);border-left:1px solid #E5E7EB">\'+clp(d.granTotal||0)+\'</td></tr>\';
   tb.innerHTML=html;
+}
+
+function exportFactExcel(scope){
+  if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
+  var wb=XLSX.utils.book_new();
+  function addSheet(m){
+    var d=FACT_CV[String(m)]||{vendedores:[],rows:[],colTotals:{},granTotal:0};
+    var vends=d.vendedores||[];
+    var head=[\'Canal\'].concat(vends).concat([\'Total\']);
+    var aoa=[head];
+    (d.rows||[]).forEach(function(r){
+      var row=[r.Canal];
+      vends.forEach(function(v){ row.push(Math.round(r.Vals[v]||0)); });
+      row.push(Math.round(r.Total||0));
+      aoa.push(row);
+    });
+    var tot=[\'TOTAL\'];
+    vends.forEach(function(v){ tot.push(Math.round(d.colTotals[v]||0)); });
+    tot.push(Math.round(d.granTotal||0));
+    aoa.push(tot);
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws[\'!cols\']=[{wch:20}].concat(vends.map(function(){return {wch:16};})).concat([{wch:16}]);
+    XLSX.utils.book_append_sheet(wb,ws,MESES_NOM[m]||String(m));
+  }
+  if(scope===\'mes\'){ addSheet(parseInt(mesActual)); }
+  else { for(var m=1;m<=12;m++) addSheet(m); }
+  XLSX.writeFile(wb,\'Facturacion_Canal_Vendedor_\'+(scope===\'mes\'?MESES_NOM[parseInt(mesActual)]:\'Año\')+\'_ANIO_.xlsx\');
 }
 
 /* ══ TAB STOCK ══════════════════════════════════════════════════════ */
