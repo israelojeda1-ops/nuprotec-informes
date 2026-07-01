@@ -204,10 +204,15 @@ SELECT
                   ELSE CAB.Tipo END AS Tipo,
     ISNULL(VEN.VenDes,'Sin vendedor') AS Vendedor,
     ISNULL(CAN.CanDes,'Sin canal') AS Canal,
+    ISNULL(AUX.NomAux,'Sin cliente') AS Cliente,
+    CAST(CAB.Fecha AS date) AS Fecha,
+    COALESCE(CAST(CAB.Folio AS varchar(20)),CAST(CAB.Factura AS varchar(20)),
+             CAST(CAB.NroInt AS varchar(20))) AS Documento,
     CAB.NetoAfecto + CAB.NetoExento AS MontoNeto
 FROM NUPROTEC1.softland.iw_gsaen AS CAB
 LEFT JOIN NUPROTEC1.softland.cwtvend AS VEN ON CAB.CodVendedor=VEN.VenCod
 LEFT JOIN NUPROTEC1.softland.cwtcana AS CAN ON CAB.CanCod=CAN.CanCod
+LEFT JOIN NUPROTEC1.softland.cwtauxi AS AUX ON CAB.CodAux=AUX.CodAux
 WHERE YEAR(CAB.Fecha)={anio}
   AND CAB.Tipo IN ('F','N','D','B')
   AND CAB.Estado='V' AND CAB.EnMantencion<>-1
@@ -431,6 +436,22 @@ for m in range(1, 13):
         'colTotals': col_tot,
         'granTotal': sum(col_tot.values()),
     }
+
+# ── Detalle de facturación a nivel de documento (para descarga Excel) ─────────
+FACT_DET = {}
+for m in range(1, 13):
+    dfm = df_fact[df_fact['Mes'] == m]
+    FACT_DET[str(m)] = [{
+        'fecha':    str(r['Fecha']),
+        'tipo':     str(r['Tipo']),
+        'doc':      str(r['Documento']) if pd.notna(r['Documento']) else '',
+        'cliente':  str(r['Cliente']).strip(),
+        'vendedor': str(r['Vendedor']).strip(),
+        'canal':    str(r['Canal']).strip(),
+        # NC en negativo para que el neto sume correctamente en Excel
+        'neto':     float(-abs(r['MontoNeto'])) if r['Tipo'] == 'Nota de Credito'
+                    else float(r['MontoNeto']),
+    } for _, r in dfm.sort_values(['Canal', 'Vendedor', 'Fecha']).iterrows()]
 
 # ── Tab Pendientes Año: PEND_ANIO ─────────────────────────────────────────────
 PEND_ANIO = {}
@@ -912,6 +933,7 @@ var NV_DET     = NV_DET_;
 var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var FACT_CV    = FACTCV_;
+var FACT_DET   = FACTDET_;
 var PEND_ANIO  = PNDANO_;
 var PEND_DET   = PNDDET_;
 var STOCK         = STOCK_;
@@ -1225,27 +1247,21 @@ function exportFactExcel(scope){
   if(typeof XLSX===\'undefined\'){ alert(\'Librería Excel no cargada aún.\'); return; }
   var wb=XLSX.utils.book_new();
   function addSheet(m){
-    var d=FACT_CV[String(m)]||{vendedores:[],rows:[],colTotals:{},granTotal:0};
-    var vends=d.vendedores||[];
-    var head=[\'Canal\'].concat(vends).concat([\'Total\']);
-    var aoa=[head];
-    (d.rows||[]).forEach(function(r){
-      var row=[r.Canal];
-      vends.forEach(function(v){ row.push(Math.round(r.Vals[v]||0)); });
-      row.push(Math.round(r.Total||0));
-      aoa.push(row);
+    var rows=FACT_DET[String(m)]||[];
+    var aoa=[[\'Fecha\',\'Tipo\',\'Documento\',\'Cliente\',\'Vendedor\',\'Canal\',\'Neto\']];
+    var tot=0;
+    rows.forEach(function(r){
+      aoa.push([r.fecha,r.tipo,r.doc,r.cliente,r.vendedor,r.canal,Math.round(r.neto||0)]);
+      tot+=r.neto||0;
     });
-    var tot=[\'TOTAL\'];
-    vends.forEach(function(v){ tot.push(Math.round(d.colTotals[v]||0)); });
-    tot.push(Math.round(d.granTotal||0));
-    aoa.push(tot);
+    aoa.push([\'\',\'\',\'\',\'\',\'\',\'TOTAL NETO\',Math.round(tot)]);
     var ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws[\'!cols\']=[{wch:20}].concat(vends.map(function(){return {wch:16};})).concat([{wch:16}]);
+    ws[\'!cols\']=[{wch:12},{wch:16},{wch:14},{wch:32},{wch:22},{wch:18},{wch:16}];
     XLSX.utils.book_append_sheet(wb,ws,MESES_NOM[m]||String(m));
   }
   if(scope===\'mes\'){ addSheet(parseInt(mesActual)); }
   else { for(var m=1;m<=12;m++) addSheet(m); }
-  XLSX.writeFile(wb,\'Facturacion_Canal_Vendedor_\'+(scope===\'mes\'?MESES_NOM[parseInt(mesActual)]:\'Año\')+\'_ANIO_.xlsx\');
+  XLSX.writeFile(wb,\'Facturacion_Detalle_\'+(scope===\'mes\'?MESES_NOM[parseInt(mesActual)]:\'Año\')+\'_ANIO_.xlsx\');
 }
 
 /* ══ TAB STOCK ══════════════════════════════════════════════════════ */
@@ -1596,6 +1612,7 @@ html = (HTML_TEMPLATE
     .replace('NV_RES_',  js_safe(NV_RESUMEN))
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
     .replace('FACTCV_',  js_safe(FACT_CV))
+    .replace('FACTDET_', js_safe(FACT_DET))
     .replace('PNDANO_',  js_safe(PEND_ANIO))
     .replace('PNDDET_',  js_safe(PEND_DET))
     .replace('STOCK_',   js_safe(STOCK_DATA))
