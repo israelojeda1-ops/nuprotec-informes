@@ -884,7 +884,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     </div>
   </div>
 
-  <div class="footer">N&Uuml;PROTEC SpA &nbsp;&middot;&nbsp; Informe generado autom&aacute;ticamente &nbsp;&middot;&nbsp; GEN_</div>
+  <div class="footer">N&Uuml;PROTEC SpA &nbsp;&middot;&nbsp; Informe generado autom&aacute;ticamente &nbsp;&middot;&nbsp; GEN_ &nbsp;&middot;&nbsp; <span id="visitas">&#128065; &hellip; visitas</span></div>
 </div>
 <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
 
@@ -1529,6 +1529,22 @@ updatePendTab();
 initStock();
 updateVentasTab(\'MES_\');
 updateClienteTab(\'MES_\');
+
+/* ══ CONTADOR DE VISITAS (Abacus, sin cuentas) ══════════════════════ */
+(function(){
+  var NS=\'nuprotec-informes\', KEY=\'dashboard-2026\';
+  var base=\'https://abacus.jasoncameron.dev/\';
+  var yaContado=sessionStorage.getItem(\'nu_visit\')===\'1\';
+  var accion=yaContado?\'get/\':\'hit/\';
+  fetch(base+accion+NS+\'/\'+KEY).then(function(r){return r.json();}).then(function(j){
+    if(!yaContado) sessionStorage.setItem(\'nu_visit\',\'1\');
+    var n=(j&&(j.value!=null?j.value:j.count))||0;
+    var el=document.getElementById(\'visitas\');
+    if(el) el.innerHTML=\'\\uD83D\\uDC41 \'+n.toLocaleString(\'es-CL\')+\' visitas\';
+  }).catch(function(){
+    var el=document.getElementById(\'visitas\'); if(el) el.style.display=\'none\';
+  });
+})();
 </script>
 </body></html>'''
 
