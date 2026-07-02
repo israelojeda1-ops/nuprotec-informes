@@ -94,4 +94,31 @@ try:
 except Exception as e:
     print(f'  No se pudo obtener muestra: {e}')
 
+# ── 5. Muestras de tablas de caja / forma de pago (para Arqueo) ───────────────
+print('Muestras de tablas de pago/caja...')
+PAGO_TABLES = [
+    'vw_movcaja', 'vw_tcaja', 'vw_apecaja', 'vw_ttarje',
+    'xwtfpago', 'pwformaspago', 'cwtauxpagos',
+]
+for tbl in PAGO_TABLES:
+    try:
+        m = qdf(f"SELECT TOP 80 * FROM NUPROTEC1.softland.{tbl}")
+        m.to_csv(f'{OUT}/muestra_{tbl}.csv', index=False, encoding='utf-8-sig')
+        print(f'  {tbl}: {len(m)} filas, {len(m.columns)} cols')
+    except Exception as e:
+        print(f'  {tbl}: no disponible ({str(e)[:80]})')
+
+# Mapeo de FmaPago en iw_gsaen: valores distintos y su relación con caja
+try:
+    fp = qdf("""
+        SELECT FmaPago, COUNT(*) AS N
+        FROM NUPROTEC1.softland.iw_gsaen
+        WHERE YEAR(Fecha) >= 2025
+        GROUP BY FmaPago ORDER BY N DESC
+    """)
+    fp.to_csv(f'{OUT}/iw_gsaen_fmapago.csv', index=False, encoding='utf-8-sig')
+    print(f'  FmaPago distintos: {len(fp)}')
+except Exception as e:
+    print(f'  FmaPago: {str(e)[:80]}')
+
 print('Esquema volcado en', OUT)
