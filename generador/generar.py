@@ -239,6 +239,31 @@ GROUP BY YEAR(CAB.Fecha),MONTH(CAB.Fecha),G.CodGrupo,G.DesGrupo,PROD.CodProd,PRO
 ORDER BY G.DesGrupo, PROD.DesProd
 """
 
+# Arqueo: documentos (B/F/N) con su forma de pago (glosa de la referencia) y
+# código de autorización. Ventana móvil de 60 días.
+SQL_ARQUEO = f"""
+SELECT
+    CAST(cab.Fecha AS date) AS Dia,
+    cab.Tipo AS TipoDoc,
+    CAST(cab.Folio AS varchar(20)) AS Folio,
+    ISNULL(cab.RutAux,'') AS Rut,
+    ISNULL(cab.NomAux,'') AS Cliente,
+    cab.Total AS Total,
+    ref.Glosa AS FormaGlosa,
+    ref.FolioRef AS CodAut
+FROM NUPROTEC1.softland.iw_gsaen AS cab
+OUTER APPLY (
+    SELECT TOP 1 r.Glosa, r.FolioRef
+    FROM NUPROTEC1.softland.IW_GSaEn_RefDTE AS r
+    WHERE r.Tipo = cab.Tipo AND r.NroInt = cab.NroInt
+    ORDER BY r.LineaRef
+) AS ref
+WHERE cab.Tipo IN ('F','B','N')
+  AND cab.Estado='V' AND cab.EnMantencion<>-1
+  AND cab.Fecha >= DATEADD(day, -60, CAST(GETDATE() AS date))
+ORDER BY cab.Fecha DESC, cab.Folio
+"""
+
 # ══════════════════════════════════════════════════════════════════════════════
 # EJECUTAR QUERIES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -249,6 +274,11 @@ df_nv           = qdf(SQL_NV)
 df_stock        = qdf(SQL_STOCK)
 df_fact         = qdf(SQL_FACT)
 df_ventas       = qdf(SQL_VENTAS)
+try:
+    df_arqueo = qdf(SQL_ARQUEO)
+except Exception as e:
+    print(f'  Arqueo no disponible: {e}')
+    df_arqueo = pd.DataFrame(columns=['Dia','TipoDoc','Folio','Rut','Cliente','Total','FormaGlosa','CodAut'])
 print(f'  Resumen cotizaciones : {len(df_resumen)} filas')
 print(f'  Detalle cotizaciones : {len(df_cotizaciones)} filas')
 print(f'  Notas de Venta       : {len(df_nv)} filas')
@@ -452,6 +482,42 @@ for m in range(1, 13):
         'neto':     float(-abs(r['MontoNeto'])) if r['Tipo'] == 'Nota de Credito'
                     else float(r['MontoNeto']),
     } for _, r in dfm.sort_values(['Canal', 'Vendedor', 'Fecha']).iterrows()]
+
+# ── Tab Arqueo: documentos por día con forma de pago ──────────────────────────
+TIPO_DOC_NOMBRE = {'F': 'Factura', 'B': 'Boleta', 'N': 'Nota Crédito'}
+
+def _forma_pago(glosa):
+    g = str(glosa or '').strip().upper()
+    if not g or g == 'NOTA DE PEDIDO':
+        return 'Por revisar'
+    if g.startswith('TC'):                            return 'Tarjeta Crédito'
+    if g.startswith('TD'):                            return 'Tarjeta Débito'
+    if g.startswith('TF') or g.startswith('ATF') or 'TRANSF' in g: return 'Transferencia'
+    if g.startswith('ML') or 'MERCADO' in g:          return 'Mercado Libre'
+    if 'WEBPAY' in g or g.startswith('WP'):           return 'WebPay'
+    if g.startswith('PW'):                            return 'Por revisar'
+    if g.startswith('DP') or 'DEPOSITO' in g or 'DEPÓSITO' in g: return 'Depósito'
+    if g.startswith('EF') or 'EFECTIVO' in g:         return 'Efectivo'
+    if g.startswith('CH') or 'CHEQUE' in g:           return 'Cheque'
+    return 'Por revisar'
+
+ARQUEO = {}
+for _, r in df_arqueo.iterrows():
+    dia = str(r['Dia'])
+    tipo = str(r['TipoDoc'])
+    monto = float(r['Total']) if pd.notna(r['Total']) else 0.0
+    if tipo == 'N':
+        monto = -abs(monto)
+    ARQUEO.setdefault(dia, []).append({
+        'tipo':   TIPO_DOC_NOMBRE.get(tipo, tipo),
+        'folio':  str(r['Folio']).replace('.0', ''),
+        'rut':    str(r['Rut']).strip(),
+        'cliente': str(r['Cliente']).strip(),
+        'monto':  monto,
+        'forma':  _forma_pago(r['FormaGlosa']),
+        'aut':    str(r['CodAut']).strip() if pd.notna(r['CodAut']) else '',
+    })
+ARQUEO_DIAS = sorted(ARQUEO.keys(), reverse=True)
 
 # ── Tab Pendientes Año: PEND_ANIO ─────────────────────────────────────────────
 PEND_ANIO = {}
@@ -718,6 +784,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     <button class="tab-btn"         onclick="switchTab(this,\'stock\')">Stock</button>
     <button class="tab-btn"         onclick="switchTab(this,\'ventas\')">Ventas Mes</button>
     <button class="tab-btn"         onclick="switchTab(this,\'cliente\')">Por Cliente</button>
+    <button class="tab-btn"         onclick="switchTab(this,\'arqueo\')">Arqueo</button>
   </nav>
 
   <!-- ════ TAB 1: COTIZACIONES ════ -->
@@ -905,6 +972,45 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
     </div>
   </div>
 
+  <!-- ════ TAB: ARQUEO ════ -->
+  <div id="tab-arqueo" class="tab-content">
+    <div class="selector-container" style="margin-bottom:1rem;gap:10px">
+      <label for="arqueo-select" style="color:var(--nu-blue)">D&iacute;a:</label>
+      <select id="arqueo-select" class="month-select" style="color:var(--nu-blue);background:#fff;border-color:#D1D5DB" onchange="updateArqueo(this.value)"></select>
+    </div>
+    <div class="kpis" id="arqueo-kpis"></div>
+    <div class="split-layout" style="grid-template-columns:1.6fr 1fr">
+      <div class="card">
+        <div class="card-title">Documentos del d&iacute;a &mdash; deben cuadrar con la venta diaria</div>
+        <div style="overflow-x:auto">
+          <table class="main">
+            <thead><tr>
+              <th style="text-align:left">Tipo</th>
+              <th>N&deg;</th>
+              <th style="text-align:left;border-right:1px solid #E5E7EB">Cliente</th>
+              <th>Forma de pago</th>
+              <th>C&oacute;d. autoriz.</th>
+              <th style="text-align:right">Monto</th>
+            </tr></thead>
+            <tbody id="arqueo-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Resumen por forma de pago</div>
+        <div style="overflow-x:auto">
+          <table class="main">
+            <thead><tr>
+              <th style="text-align:left">Forma de pago</th>
+              <th>N&deg;</th><th style="text-align:right">Monto</th>
+            </tr></thead>
+            <tbody id="arqueo-resumen"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">N&Uuml;PROTEC SpA &nbsp;&middot;&nbsp; Informe generado el GEN_ &nbsp;/&nbsp; <span id="visitas">V&hellip;</span></div>
 </div>
 <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
@@ -930,6 +1036,8 @@ var NV_RES     = NV_RES_;
 var FACT_RES   = FACT_RES_;
 var FACT_CV    = FACTCV_;
 var FACT_DET   = FACTDET_;
+var ARQUEO     = ARQROWS_;
+var ARQUEO_DIAS= ARQDAYS_;
 var PEND_ANIO  = PNDANO_;
 var PEND_DET   = PNDDET_;
 var STOCK         = STOCK_;
@@ -1559,6 +1667,64 @@ function regenerarDashboard(){
   }).catch(function(e){ btn.disabled=false; btn.textContent=\'🔄 Regenerar\'; showToast(\'❌ Error de red: \'+e.message,4000); });
 }
 
+/* ══ TAB ARQUEO ═════════════════════════════════════════════════════ */
+function initArqueo(){
+  var sel=document.getElementById(\'arqueo-select\');
+  if(!sel) return;
+  if(!ARQUEO_DIAS.length){ sel.innerHTML=\'<option>Sin datos</option>\'; return; }
+  var opt=\'\';
+  ARQUEO_DIAS.forEach(function(d){
+    var p=d.split(\'-\'); var etq=p.length===3?(p[2]+\'/\'+p[1]+\'/\'+p[0]):d;
+    opt+=\'<option value="\'+d+\'">\'+etq+\'</option>\';
+  });
+  sel.innerHTML=opt;
+  updateArqueo(ARQUEO_DIAS[0]);
+}
+function updateArqueo(dia){
+  var rows=ARQUEO[dia]||[];
+  var total=0, res={};
+  rows.forEach(function(r){
+    total+=r.monto;
+    if(!res[r.forma]) res[r.forma]={n:0,m:0};
+    res[r.forma].n++; res[r.forma].m+=r.monto;
+  });
+  // KPIs
+  var porRev=(res[\'Por revisar\']?res[\'Por revisar\'].n:0);
+  document.getElementById(\'arqueo-kpis\').innerHTML=
+    \'<div class="kpi"><div class="kpi-lbl">Venta del día</div><div class="kpi-val">\'+clp(total)+\'</div><div class="kpi-sub">\'+rows.length+\' documentos</div></div>\'+
+    \'<div class="kpi"><div class="kpi-lbl">Formas de pago</div><div class="kpi-val">\'+Object.keys(res).length+\'</div><div class="kpi-sub">distintas</div></div>\'+
+    \'<div class="kpi"><div class="kpi-lbl">Por revisar</div><div class="kpi-val">\'+porRev+\'</div><div class="kpi-sub">sin forma de pago</div></div>\';
+  // Lista
+  var tb=document.getElementById(\'arqueo-tbody\');
+  if(!rows.length){ tb.innerHTML=\'<tr><td colspan="6" style="text-align:center;padding:40px;color:#9CA3AF">Sin documentos.</td></tr>\'; }
+  else {
+    var h=\'\';
+    rows.forEach(function(r){
+      var col=r.tipo===\'Nota Crédito\'?\'#721c24\':\'#111827\';
+      var fp=r.forma===\'Por revisar\'?\'<span style="color:#D97706;font-weight:600">Por revisar</span>\':r.forma;
+      h+=\'<tr style="border-bottom:1px solid #F3F4F6">\';
+      h+=\'<td style="text-align:left"><span class="tag" style="background:#EEF2FF;color:#1B2A4E">\'+r.tipo+\'</span></td>\';
+      h+=\'<td>\'+r.folio+\'</td>\';
+      h+=\'<td style="text-align:left;border-right:1px solid #E5E7EB;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\'+r.cliente+\'">\'+(r.cliente||\'&mdash;\')+\'</td>\';
+      h+=\'<td>\'+fp+\'</td>\';
+      h+=\'<td style="font-size:11px;color:#6B7280">\'+(r.aut||\'&mdash;\')+\'</td>\';
+      h+=\'<td style="text-align:right;font-weight:600;color:\'+col+\'">\'+clp(r.monto)+\'</td></tr>\';
+    });
+    tb.innerHTML=h;
+  }
+  // Resumen por forma de pago
+  var rb=document.getElementById(\'arqueo-resumen\');
+  var formas=Object.keys(res).sort(function(a,b){return res[b].m-res[a].m;});
+  var rh=\'\';
+  formas.forEach(function(f){
+    var c=f===\'Por revisar\'?\'color:#D97706;font-weight:700\':\'\';
+    rh+=\'<tr style="border-bottom:1px solid #F3F4F6"><td style="text-align:left;\'+c+\'">\'+f+\'</td>\';
+    rh+=\'<td>\'+res[f].n+\'</td><td style="text-align:right;font-weight:600">\'+clp(res[f].m)+\'</td></tr>\';
+  });
+  rh+=\'<tr style="background:#F3F4F6;border-top:2px solid #D1D5DB;font-weight:700"><td style="text-align:left">TOTAL DÍA</td><td>\'+rows.length+\'</td><td style="text-align:right;color:var(--nu-blue)">\'+clp(total)+\'</td></tr>\';
+  rb.innerHTML=rh;
+}
+
 /* ══ INICIO ══════════════════════════════════════════════════════════ */
 updateCotiTab(\'MES_\');
 updateNVTab(\'MES_\');
@@ -1567,6 +1733,7 @@ updatePendTab();
 initStock();
 updateVentasTab(\'MES_\');
 updateClienteTab(\'MES_\');
+initArqueo();
 
 /* ══ CONTADOR DE VISITAS (Abacus, sin cuentas) ══════════════════════ */
 (function(){
@@ -1604,6 +1771,8 @@ html = (HTML_TEMPLATE
     .replace('FACT_RES_',js_safe(FACT_RESUMEN))
     .replace('FACTCV_',  js_safe(FACT_CV))
     .replace('FACTDET_', js_safe(FACT_DET))
+    .replace('ARQROWS_', js_safe(ARQUEO))
+    .replace('ARQDAYS_', js_safe(ARQUEO_DIAS))
     .replace('PNDANO_',  js_safe(PEND_ANIO))
     .replace('PNDDET_',  js_safe(PEND_DET))
     .replace('STOCK_',   js_safe(STOCK_DATA))
