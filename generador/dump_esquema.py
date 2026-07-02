@@ -155,17 +155,17 @@ try:
     hoy = qdf("""
         SELECT
             cab.Fecha, cab.Tipo AS TipoDoc, cab.Folio, cab.NomAux AS Cliente,
-            cab.RutAux, cab.Total,
-            r.CodRefSII, r.CodRef, r.FolioRef AS NumOperacion, r.RazonRef AS FormaPago
+            cab.RutAux, cab.Total, cab.FmaPago, cab.CondPago, cab.Glosa AS GlosaDoc,
+            r.LineaRef, r.CodRefSII, r.CodRef, r.FolioRef, r.RazonRef, r.Glosa AS GlosaRef
         FROM NUPROTEC1.softland.iw_gsaen AS cab
         LEFT JOIN NUPROTEC1.softland.IW_GSaEn_RefDTE AS r
             ON cab.Tipo = r.Tipo AND cab.NroInt = r.NroInt
         WHERE cab.Fecha >= '2026-07-01'
           AND cab.Estado='V' AND cab.EnMantencion<>-1
-        ORDER BY cab.Fecha DESC, cab.Folio
+        ORDER BY cab.Folio, r.LineaRef
     """)
     hoy.to_csv(f'{OUT}/muestra_docs_julio.csv', index=False, encoding='utf-8-sig')
-    print(f'  docs julio: {len(hoy)} filas')
+    print(f'  docs julio: {len(hoy)} filas (todas las lineas de referencia)')
 except Exception as e:
     print(f'  docs julio: {str(e)[:120]}')
 
