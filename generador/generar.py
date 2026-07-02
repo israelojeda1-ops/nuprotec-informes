@@ -979,34 +979,32 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
       <select id="arqueo-select" class="month-select" style="color:var(--nu-blue);background:#fff;border-color:#D1D5DB" onchange="updateArqueo(this.value)"></select>
     </div>
     <div class="kpis" id="arqueo-kpis"></div>
-    <div class="split-layout" style="grid-template-columns:1.6fr 1fr">
-      <div class="card">
-        <div class="card-title">Documentos del d&iacute;a &mdash; deben cuadrar con la venta diaria</div>
-        <div style="overflow-x:auto">
-          <table class="main">
-            <thead><tr>
-              <th style="text-align:left">Tipo</th>
-              <th>N&deg;</th>
-              <th style="text-align:left;border-right:1px solid #E5E7EB">Cliente</th>
-              <th>Forma de pago</th>
-              <th>C&oacute;d. autoriz.</th>
-              <th style="text-align:right">Monto</th>
-            </tr></thead>
-            <tbody id="arqueo-tbody"></tbody>
-          </table>
-        </div>
+    <div class="card">
+      <div class="card-title">Resumen por forma de pago</div>
+      <div style="overflow-x:auto">
+        <table class="main">
+          <thead><tr>
+            <th style="text-align:left">Forma de pago</th>
+            <th>N&deg;</th><th style="text-align:right">Monto</th>
+          </tr></thead>
+          <tbody id="arqueo-resumen"></tbody>
+        </table>
       </div>
-      <div class="card">
-        <div class="card-title">Resumen por forma de pago</div>
-        <div style="overflow-x:auto">
-          <table class="main">
-            <thead><tr>
-              <th style="text-align:left">Forma de pago</th>
-              <th>N&deg;</th><th style="text-align:right">Monto</th>
-            </tr></thead>
-            <tbody id="arqueo-resumen"></tbody>
-          </table>
-        </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Documentos del d&iacute;a &mdash; deben cuadrar con la venta diaria</div>
+      <div style="overflow-x:auto">
+        <table class="main">
+          <thead><tr>
+            <th style="text-align:left">Tipo</th>
+            <th>N&deg;</th>
+            <th style="text-align:left;border-right:1px solid #E5E7EB">Cliente</th>
+            <th>Forma de pago</th>
+            <th>C&oacute;d. autoriz.</th>
+            <th style="text-align:right">Monto</th>
+          </tr></thead>
+          <tbody id="arqueo-tbody"></tbody>
+        </table>
       </div>
     </div>
   </div>
