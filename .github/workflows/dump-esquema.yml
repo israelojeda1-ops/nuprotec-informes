@@ -1,0 +1,42 @@
+name: Volcar esquema Softland (base de conocimiento)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar ODBC Driver 17 para SQL Server
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update -q
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17 unixodbc-dev
+
+      - name: Instalar dependencias Python
+        run: pip install -r generador/requirements.txt
+
+      - name: Volcar esquema
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python generador/dump_esquema.py
+
+      - name: Publicar esquema en el repositorio
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/israelojeda1-ops/nuprotec-informes.git
+          git add docs/esquema
+          git diff --cached --quiet \
+            || git commit -m "Esquema Softland volcado (base de conocimiento) [skip ci]"
+          git push
