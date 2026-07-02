@@ -246,12 +246,14 @@ SELECT
     CAST(cab.Fecha AS date) AS Dia,
     cab.Tipo AS TipoDoc,
     CAST(cab.Folio AS varchar(20)) AS Folio,
+    ISNULL(cab.CodAux,'') AS CodAux,
     ISNULL(cab.RutAux,'') AS Rut,
-    ISNULL(cab.NomAux,'') AS Cliente,
+    ISNULL(NULLIF(LTRIM(RTRIM(cab.NomAux)),''), ISNULL(aux.NomAux,'')) AS Cliente,
     cab.Total AS Total,
     ref.Glosa AS FormaGlosa,
     ref.FolioRef AS CodAut
 FROM NUPROTEC1.softland.iw_gsaen AS cab
+LEFT JOIN NUPROTEC1.softland.cwtauxi AS aux ON aux.CodAux = cab.CodAux
 OUTER APPLY (
     SELECT TOP 1 r.Glosa, r.FolioRef
     FROM NUPROTEC1.softland.IW_GSaEn_RefDTE AS r
@@ -278,7 +280,7 @@ try:
     df_arqueo = qdf(SQL_ARQUEO)
 except Exception as e:
     print(f'  Arqueo no disponible: {e}')
-    df_arqueo = pd.DataFrame(columns=['Dia','TipoDoc','Folio','Rut','Cliente','Total','FormaGlosa','CodAut'])
+    df_arqueo = pd.DataFrame(columns=['Dia','TipoDoc','Folio','CodAux','Rut','Cliente','Total','FormaGlosa','CodAut'])
 print(f'  Resumen cotizaciones : {len(df_resumen)} filas')
 print(f'  Detalle cotizaciones : {len(df_cotizaciones)} filas')
 print(f'  Notas de Venta       : {len(df_nv)} filas')
@@ -511,6 +513,7 @@ for _, r in df_arqueo.iterrows():
     ARQUEO.setdefault(dia, []).append({
         'tipo':   TIPO_DOC_NOMBRE.get(tipo, tipo),
         'folio':  str(r['Folio']).replace('.0', ''),
+        'codaux': str(r['CodAux']).strip(),
         'rut':    str(r['Rut']).strip(),
         'cliente': str(r['Cliente']).strip(),
         'monto':  monto,
@@ -998,6 +1001,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
           <thead><tr>
             <th style="text-align:left">Tipo</th>
             <th>N&deg;</th>
+            <th>CodAux</th>
             <th style="text-align:left;border-right:1px solid #E5E7EB">Cliente</th>
             <th>Forma de pago</th>
             <th>C&oacute;d. autoriz.</th>
@@ -1694,7 +1698,7 @@ function updateArqueo(dia){
     \'<div class="kpi"><div class="kpi-lbl">Por revisar</div><div class="kpi-val">\'+porRev+\'</div><div class="kpi-sub">sin forma de pago</div></div>\';
   // Lista
   var tb=document.getElementById(\'arqueo-tbody\');
-  if(!rows.length){ tb.innerHTML=\'<tr><td colspan="6" style="text-align:center;padding:40px;color:#9CA3AF">Sin documentos.</td></tr>\'; }
+  if(!rows.length){ tb.innerHTML=\'<tr><td colspan="7" style="text-align:center;padding:40px;color:#9CA3AF">Sin documentos.</td></tr>\'; }
   else {
     var h=\'\';
     rows.forEach(function(r){
@@ -1703,6 +1707,7 @@ function updateArqueo(dia){
       h+=\'<tr style="border-bottom:1px solid #F3F4F6">\';
       h+=\'<td style="text-align:left"><span class="tag" style="background:#EEF2FF;color:#1B2A4E">\'+r.tipo+\'</span></td>\';
       h+=\'<td>\'+r.folio+\'</td>\';
+      h+=\'<td style="font-size:11px;color:#6B7280">\'+(r.codaux||\'&mdash;\')+\'</td>\';
       h+=\'<td style="text-align:left;border-right:1px solid #E5E7EB;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\'+r.cliente+\'">\'+(r.cliente||\'&mdash;\')+\'</td>\';
       h+=\'<td>\'+fp+\'</td>\';
       h+=\'<td style="font-size:11px;color:#6B7280">\'+(r.aut||\'&mdash;\')+\'</td>\';
