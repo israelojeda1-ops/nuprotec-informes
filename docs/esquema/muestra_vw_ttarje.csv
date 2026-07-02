@@ -1,0 +1,7 @@
+﻿CodTarjeta,DesTarjeta,PCCODI,Pinpad,CodTarjeTBK,EsTransBank
+01,VISA,,0,,0
+02,MASTERCARD,,0,,0
+03,DINERS,,0,,0
+04,AMERICAN EXPRESS,,0,,0
+05,WEBPAY,,0,,-1
+06,MERCADO LIBRE,,0,,0

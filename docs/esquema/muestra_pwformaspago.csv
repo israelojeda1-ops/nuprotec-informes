@@ -1,0 +1,62 @@
+﻿codBanco,CodFormaPago,DescFPag,TipoPago
+001,01,ABONO A CTA.CTE. BANCO CHILE,1
+001,02,VALE VISTA POR MESON,1
+001,03,VALE VISTA POR CORREO,1
+001,04,VALE VISTA A EMPRESA,1
+001,06,ABONO A CTA.AHORRO BCO.CHILE,1
+001,07,ABONO A CTA.CTE. OTRO BANCO,1
+001,08,ABONO A CTA.AHORRO OTRO BCO.,1
+001,11,BANCUENTA CREDICHILE,1
+001,12,PAGO EN EFECTIVO SERVIPAG,1
+012,01,CTA CORRIENTE / CTA VISTA,1
+012,02,CTA AHORRO,1
+012,20,VALE VISTA DIRECCIONADO ENTREGA AL BENEFICIARIO,1
+012,22,CHEQUERA ELECTRONICA,1
+012,23,VALE VISTA CUSTODIA ELECTRONICA,1
+012,28,VALE VISTA DIRECCIONADO ENTREGA AL TOMADOR,1
+012,29,PAGO CASH,1
+012,30,CUENTA RUT,1
+014,AB,Cuenta de Ahorro Otros Banco,1
+014,AH,Cuenta de Ahorro SCOTIABANK CHILE,1
+014,CC,Cuenta Corriente SCOTIABANK CHILE,1
+014,OB,Cuenta Corriente / Cuenta Vista Otro Banco,1
+014,VI,Cuenta Vista SCOTIABANK CHILE,1
+014,VV,Vale Vista Masivo Predefinido a Sucursal,1
+014,VX,Vale Vista Virtual,1
+016,AHO,Cuenta de Ahorro Bci ,1
+016,CCT,Cuenta Corriente Bci,1
+016,EFE,Efectivo,1
+016,OTA,Cuenta de Ahorro Otro Banco ,1
+016,OTC,Cuenta Corriente Otro Banco ,1
+016,VVC,Vale a la Vista ,1
+016,VVD,Vale a la Vista por Correo,1
+027,001,Vale vista virtual,1
+027,002,Transferencia,1
+027,003,Orden de pago,1
+027,004,Vale vista impreso,1
+028,1,Cuenta Vista,1
+028,2,Cuenta de Ahorro,1
+028,3,Cuenta Corriente,1
+028,4,Vale vista,1
+033,070,Depósito en Cuenta Corriente,1
+033,071,Deposito en cuenta corriente en otro banco (INTERBANK),1
+033,073,Vale Vista (Manager Check),1
+037,1,Vale vista,1
+037,2,Vale vista por correo,1
+037,3,Abono en Cuenta Corriente,1
+037,4,Abono en Cuenta de Ahorro,1
+039,CCT,Cuenta en el Mismo Banco,2
+039,OTC,Cuenta en Otros Bancos,2
+039,PBC,Abono cuenta cte. otros Bancos,1
+039,PBR,Abono cuenta cte. en Banco ITAU,1
+039,PCA,Abono cuenta de ahorro,1
+039,PCH,Pago con Cheque,1
+039,PVV,Vale vista,1
+039,VVC,Vale Vista,2
+049,1,Cuenta Corriente,1
+049,1,Cuenta Corriente,2
+049,2,Cuenta Vista,1
+049,2,Cuenta Vista,2
+049,3,Cuenta de Ahorro,1
+049,3,Cuenta de Ahorro,2
+049,4,Vale Vista,1
