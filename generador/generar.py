@@ -589,12 +589,9 @@ STOCK_DATA = [
         'prod':  str(r.Producto).strip(),
         'grupo': str(r.Grupo).strip(),
         'sub':   str(r.SubGrupo).strip(),
-        'costo': float(r.Costo),
-        'precio':float(r.PrecioNeto),
         's08':   float(r.Stock08),
         's20':   float(r.Stock20),
         'total': float(r.StockTotal),
-        'valor': round(float(r.StockTotal) * float(r.Costo), 0),
     }
     for _, r in df_stock.iterrows()
 ]
@@ -844,8 +841,7 @@ table.main td{text-align:center;padding:8px;transition:filter 0.1s;}
             <th style="text-align:left">Producto</th>
             <th style="text-align:left;border-right:1px solid #E5E7EB">Grupo</th>
             <th>Bod.08</th><th>Bod.20</th>
-            <th style="border-right:1px solid #E5E7EB">Total</th>
-            <th>Costo unit.</th><th>Precio neto</th><th>Valor stock</th>
+            <th>Total</th>
           </tr></thead>
           <tbody id="st-tbody"></tbody>
         </table>
@@ -1286,26 +1282,21 @@ function filterStock(){
 function renderStock(){
   var tbody=document.getElementById(\'st-tbody\');
   document.getElementById(\'st-count\').textContent=stockFilt.length+\' productos\';
-  if(!stockFilt.length){ tbody.innerHTML=\'<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">Sin resultados.</td></tr>\'; return; }
-  var html=\'\'; var ss08=0,ss20=0,stot=0,sval=0;
+  if(!stockFilt.length){ tbody.innerHTML=\'<tr><td colspan="5" style="text-align:center;padding:40px;color:#9CA3AF">Sin resultados.</td></tr>\'; return; }
+  var html=\'\'; var ss08=0,ss20=0,stot=0;
   stockFilt.forEach(function(s){
-    ss08+=s.s08; ss20+=s.s20; stot+=s.total; sval+=s.valor;
+    ss08+=s.s08; ss20+=s.s20; stot+=s.total;
     html+=\'<tr style="border-bottom:1px solid #F3F4F6">\';
     html+=\'<td style="padding:6px 8px;text-align:left;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\'+s.prod+\'">\'+s.prod+\'</td>\';
     html+=\'<td style="padding:6px 8px;text-align:left;border-right:1px solid #E5E7EB"><span class="tag" style="background:#F3F4F6;color:#374151">\'+s.grupo+\'</span></td>\';
     html+=\'<td>\'+s.s08.toLocaleString(\'es-CL\')+\'</td>\';
     html+=\'<td>\'+s.s20.toLocaleString(\'es-CL\')+\'</td>\';
-    html+=\'<td style="font-weight:700;border-right:1px solid #E5E7EB">\'+s.total.toLocaleString(\'es-CL\')+\'</td>\';
-    html+=\'<td style="text-align:right">\'+clp(s.costo)+\'</td>\';
-    html+=\'<td style="text-align:right">\'+clp(s.precio)+\'</td>\';
-    html+=\'<td style="text-align:right;font-weight:600;color:var(--nu-blue)">\'+clp(s.valor)+\'</td></tr>\';
+    html+=\'<td style="font-weight:700">\'+s.total.toLocaleString(\'es-CL\')+\'</td></tr>\';
   });
   html+=\'<tr style="background:#F3F4F6;border-top:2px solid #D1D5DB;font-weight:700">\';
   html+=\'<td colspan="2" style="padding:8px;text-align:left;border-right:1px solid #E5E7EB;font-size:11px;text-transform:uppercase;color:#374151">TOTAL (\'+stockFilt.length+\' productos)</td>\';
   html+=\'<td>\'+ss08.toLocaleString(\'es-CL\')+\'</td><td>\'+ss20.toLocaleString(\'es-CL\')+\'</td>\';
-  html+=\'<td style="border-right:1px solid #E5E7EB">\'+stot.toLocaleString(\'es-CL\')+\'</td>\';
-  html+=\'<td colspan="2" style="text-align:right;color:#6B7280;font-size:11px">Valor total stock:</td>\';
-  html+=\'<td style="text-align:right;color:var(--nu-blue)">\'+clp(sval)+\'</td></tr>\';
+  html+=\'<td>\'+stot.toLocaleString(\'es-CL\')+\'</td></tr>\';
   tbody.innerHTML=html;
 }
 
